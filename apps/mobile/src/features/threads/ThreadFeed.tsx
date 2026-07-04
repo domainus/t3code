@@ -1282,11 +1282,15 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     },
     [props.onHeaderMaterialVisibilityChange],
   );
+  // anchorTopInset, not topContentInset: with automatic insets the list rests
+  // at contentOffset.y = -headerHeight (the inset only exists in UIKit's
+  // adjustedContentInset), so the header inset must be added back for the
+  // material to toggle relative to the true rest position.
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      reportHeaderMaterialVisibility(event.nativeEvent.contentOffset.y + topContentInset > 6);
+      reportHeaderMaterialVisibility(event.nativeEvent.contentOffset.y + anchorTopInset > 6);
     },
-    [reportHeaderMaterialVisibility, topContentInset],
+    [reportHeaderMaterialVisibility, anchorTopInset],
   );
   const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);

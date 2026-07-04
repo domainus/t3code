@@ -174,7 +174,10 @@ function useStreamingHaptics(threadId: ThreadId, feed: ReadonlyArray<ThreadFeedE
   }, [threadId, feed]);
 }
 
-const WORKING_INDICATOR_HEIGHT = 44;
+// Estimated height of WorkingDurationPill including its pt-2/pb-2 wrapper
+// padding; must track the pill layout so the pre-measurement overlay height
+// estimate matches what onComposerLayout later reports.
+const WORKING_INDICATOR_HEIGHT = 52;
 
 const WorkingDurationPill = memo(function WorkingDurationPill(props: {
   readonly startedAt: string;

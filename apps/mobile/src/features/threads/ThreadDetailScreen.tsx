@@ -17,9 +17,10 @@ import type {
 import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { View, type GestureResponderEvent } from "react-native";
+import { Platform, View, type GestureResponderEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
+import Animated, { FadeInDown, FadeOut, LinearTransition } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { runOnJS } from "react-native-reanimated";
 
@@ -190,7 +191,12 @@ const WorkingDurationPill = memo(function WorkingDurationPill(props: {
   const durationLabel = formatElapsed(props.startedAt, new Date(nowMs).toISOString()) ?? "0s";
 
   return (
-    <View className="px-4 pb-2" style={{ flexShrink: 0 }}>
+    <Animated.View
+      className="px-4 pb-2"
+      entering={FadeInDown.duration(200)}
+      exiting={FadeOut.duration(140)}
+      style={{ flexShrink: 0 }}
+    >
       <View className="self-start rounded-full border border-neutral-200/80 bg-neutral-50/90 px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
         <View className="flex-row items-center gap-2">
           <View className="flex-row items-center gap-1">
@@ -203,7 +209,7 @@ const WorkingDurationPill = memo(function WorkingDurationPill(props: {
           </Text>
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
@@ -244,10 +250,20 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const composerOverlapHeight = composerChrome + composerBottomInset;
   const activeWorkIndicatorHeight = props.activeWorkStartedAt ? WORKING_INDICATOR_HEIGHT : 0;
   const estimatedOverlayHeight = composerOverlapHeight + activeWorkIndicatorHeight + 8;
+  // The overlay's measured height includes the home-indicator inset (the
+  // composer pads it), but contentInsetAdjustmentBehavior="automatic" makes
+  // UIKit add the safe-area bottom to the content inset AGAIN — leaving a
+  // dead strip between the resting content and the composer. Report the
+  // overlay height minus the safe area; UIKit adds it back, and ThreadFeed
+  // hands LegendList the same delta via contentInsetEndStaticAdjustment so
+  // its end-scroll math matches the real resting position.
+  const nativeInsetOvercount =
+    props.usesAutomaticContentInsets === true && Platform.OS === "ios" ? insets.bottom : 0;
   const { contentInsetEndAdjustment, onComposerLayout } = useKeyboardChatComposerInset(
     listRef,
     composerOverlayRef,
-    estimatedOverlayHeight,
+    Math.max(0, estimatedOverlayHeight - nativeInsetOvercount),
+    -nativeInsetOvercount,
   );
   const { freeze, scrollMessageToEnd } = useKeyboardScrollToEnd({ listRef });
   const showContent = props.showContent ?? true;
@@ -426,13 +442,21 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               onLayout={onComposerLayout}
               style={{ width: "100%", paddingTop: 8 }}
             >
-              <View style={{ alignSelf: "center", maxWidth: contentMaxWidth, width: "100%" }}>
+              <Animated.View
+                layout={LinearTransition.duration(220)}
+                style={{ alignSelf: "center", maxWidth: contentMaxWidth, width: "100%" }}
+              >
                 {props.activeWorkStartedAt ? (
                   <WorkingDurationPill startedAt={props.activeWorkStartedAt} />
                 ) : null}
 
                 {props.activePendingApproval || props.activePendingUserInput ? (
-                  <View className="gap-3 px-4 pb-3" style={{ flexShrink: 0 }}>
+                  <Animated.View
+                    className="gap-3 px-4 pb-3"
+                    entering={FadeInDown.duration(220)}
+                    exiting={FadeOut.duration(140)}
+                    style={{ flexShrink: 0 }}
+                  >
                     {props.activePendingApproval ? (
                       <PendingApprovalCard
                         approval={props.activePendingApproval}
@@ -451,9 +475,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                         onSubmit={props.onSubmitUserInput}
                       />
                     ) : null}
-                  </View>
+                  </Animated.View>
                 ) : null}
-              </View>
+              </Animated.View>
 
               <ThreadComposer
                 editorRef={composerEditorRef}

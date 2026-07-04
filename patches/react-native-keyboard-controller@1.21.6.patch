@@ -1,0 +1,105 @@
+diff --git a/lib/commonjs/components/KeyboardChatScrollView/index.js b/lib/commonjs/components/KeyboardChatScrollView/index.js
+index 8640bb81c748ae284f1047ab0e4cad52c76c6b69..579f85d1f3882891a8e84d779bb687a48dfc2b67 100644
+--- a/lib/commonjs/components/KeyboardChatScrollView/index.js
++++ b/lib/commonjs/components/KeyboardChatScrollView/index.js
+@@ -68,7 +68,7 @@ const KeyboardChatScrollView = /*#__PURE__*/(0, _react.forwardRef)(({
+   // Scroll indicator inset = keyboard + extraContentPadding (excludes blankSpace).
+   // Apps that render into the unsafe area can supply a negative
+   // scrollIndicatorInsets adjustment at the application layer.
+-  const indicatorPadding = (0, _reactNativeReanimated.useDerivedValue)(() => padding.value + extraContentPadding.value);
++  const indicatorPadding = (0, _reactNativeReanimated.useDerivedValue)(() => padding.value);
+   const onLayout = (0, _react.useCallback)(e => {
+     onLayoutInternal(e);
+     onLayoutProp === null || onLayoutProp === void 0 || onLayoutProp(e);
+diff --git a/lib/commonjs/components/ScrollViewWithBottomPadding/index.js b/lib/commonjs/components/ScrollViewWithBottomPadding/index.js
+index dfd94c8f16a255eff8521ba425614a90fb6e684c..678fed771096b7fac9928741334435492a70e9f7 100644
+--- a/lib/commonjs/components/ScrollViewWithBottomPadding/index.js
++++ b/lib/commonjs/components/ScrollViewWithBottomPadding/index.js
+@@ -55,7 +55,13 @@ const ScrollViewWithBottomPadding = /*#__PURE__*/(0, _react.forwardRef)(({
+     };
+     if (contentOffsetY) {
+       const curr = contentOffsetY.value;
+-      if (curr !== prevContentOffsetY.value) {
++      if (prevContentOffsetY.value === null) {
++        // First evaluation: record the baseline without emitting. contentOffsetY
++        // only carries keyboard-driven offsets; applying the initial value here
++        // races with (and clobbers) the list's own mount positioning.
++        // eslint-disable-next-line react-compiler/react-compiler
++        prevContentOffsetY.value = curr;
++      } else if (curr !== prevContentOffsetY.value) {
+         // eslint-disable-next-line react-compiler/react-compiler
+         prevContentOffsetY.value = curr;
+         result.contentOffset = {
+diff --git a/lib/module/components/KeyboardChatScrollView/index.js b/lib/module/components/KeyboardChatScrollView/index.js
+index 5e38d3e5f1c7033169a7cb50d862d160264d0943..8820f2061cfd253047e44fdd5b931275d99d79d0 100644
+--- a/lib/module/components/KeyboardChatScrollView/index.js
++++ b/lib/module/components/KeyboardChatScrollView/index.js
+@@ -61,7 +61,7 @@ const KeyboardChatScrollView = /*#__PURE__*/forwardRef(({
+   // Scroll indicator inset = keyboard + extraContentPadding (excludes blankSpace).
+   // Apps that render into the unsafe area can supply a negative
+   // scrollIndicatorInsets adjustment at the application layer.
+-  const indicatorPadding = useDerivedValue(() => padding.value + extraContentPadding.value);
++  const indicatorPadding = useDerivedValue(() => padding.value);
+   const onLayout = useCallback(e => {
+     onLayoutInternal(e);
+     onLayoutProp === null || onLayoutProp === void 0 || onLayoutProp(e);
+diff --git a/lib/module/components/ScrollViewWithBottomPadding/index.js b/lib/module/components/ScrollViewWithBottomPadding/index.js
+index 8f41afa9eb3f19a44c9df2779268e73b3dbec785..c274d83f4b131e8925b459987e54d9c1040d925c 100644
+--- a/lib/module/components/ScrollViewWithBottomPadding/index.js
++++ b/lib/module/components/ScrollViewWithBottomPadding/index.js
+@@ -47,7 +47,13 @@ const ScrollViewWithBottomPadding = /*#__PURE__*/forwardRef(({
+     };
+     if (contentOffsetY) {
+       const curr = contentOffsetY.value;
+-      if (curr !== prevContentOffsetY.value) {
++      if (prevContentOffsetY.value === null) {
++        // First evaluation: record the baseline without emitting. contentOffsetY
++        // only carries keyboard-driven offsets; applying the initial value here
++        // races with (and clobbers) the list's own mount positioning.
++        // eslint-disable-next-line react-compiler/react-compiler
++        prevContentOffsetY.value = curr;
++      } else if (curr !== prevContentOffsetY.value) {
+         // eslint-disable-next-line react-compiler/react-compiler
+         prevContentOffsetY.value = curr;
+         result.contentOffset = {
+diff --git a/src/components/KeyboardChatScrollView/index.tsx b/src/components/KeyboardChatScrollView/index.tsx
+index 27353b57dcaa819dad36241f12baebad2ca7ca1b..60b4fb1f06a1c5efff9ac04a4dbd170b61ae883e 100644
+--- a/src/components/KeyboardChatScrollView/index.tsx
++++ b/src/components/KeyboardChatScrollView/index.tsx
+@@ -82,12 +82,11 @@ const KeyboardChatScrollView = forwardRef<
+       Math.max(blankSpace.value, padding.value + extraContentPadding.value),
+     );
+ 
+-    // Scroll indicator inset = keyboard + extraContentPadding (excludes blankSpace).
+-    // Apps that render into the unsafe area can supply a negative
+-    // scrollIndicatorInsets adjustment at the application layer.
+-    const indicatorPadding = useDerivedValue(
+-      () => padding.value + extraContentPadding.value,
+-    );
++    // Scroll indicator inset = keyboard only (excludes extraContentPadding and
++    // blankSpace): with a floating composer the indicator track should run the
++    // full height of the scroll view, behind the composer, like iOS Messages.
++    // The keyboard still lifts it so it never disappears under the keyboard.
++    const indicatorPadding = useDerivedValue(() => padding.value);
+ 
+     const onLayout = useCallback(
+       (e: LayoutChangeEvent) => {
+diff --git a/src/components/ScrollViewWithBottomPadding/index.tsx b/src/components/ScrollViewWithBottomPadding/index.tsx
+index d2a8c9b5919989bbfc54299fe79cc57e4b7dec3a..567277399f55b33f531bcb6104bcfceb794ecda9 100644
+--- a/src/components/ScrollViewWithBottomPadding/index.tsx
++++ b/src/components/ScrollViewWithBottomPadding/index.tsx
+@@ -95,7 +95,13 @@ const ScrollViewWithBottomPadding = forwardRef<
+       if (contentOffsetY) {
+         const curr = contentOffsetY.value;
+ 
+-        if (curr !== prevContentOffsetY.value) {
++        if (prevContentOffsetY.value === null) {
++          // First evaluation: record the baseline without emitting. contentOffsetY
++          // only carries keyboard-driven offsets; applying the initial value here
++          // races with (and clobbers) the list's own mount positioning.
++          // eslint-disable-next-line react-compiler/react-compiler
++          prevContentOffsetY.value = curr;
++        } else if (curr !== prevContentOffsetY.value) {
+           // eslint-disable-next-line react-compiler/react-compiler
+           prevContentOffsetY.value = curr;
+           result.contentOffset = { x: 0, y: curr };

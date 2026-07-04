@@ -192,7 +192,7 @@ const WorkingDurationPill = memo(function WorkingDurationPill(props: {
 
   return (
     <Animated.View
-      className="px-4 pb-2"
+      className="px-4 pb-2 pt-2"
       entering={FadeInDown.duration(200)}
       exiting={FadeOut.duration(140)}
       style={{ flexShrink: 0 }}
@@ -249,7 +249,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const composerChrome = composerExpanded ? COMPOSER_EXPANDED_CHROME : COMPOSER_COLLAPSED_CHROME;
   const composerOverlapHeight = composerChrome + composerBottomInset;
   const activeWorkIndicatorHeight = props.activeWorkStartedAt ? WORKING_INDICATOR_HEIGHT : 0;
-  const estimatedOverlayHeight = composerOverlapHeight + activeWorkIndicatorHeight + 8;
+  const estimatedOverlayHeight = composerOverlapHeight + activeWorkIndicatorHeight;
   // The overlay's measured height includes the home-indicator inset (the
   // composer pads it), but contentInsetAdjustmentBehavior="automatic" makes
   // UIKit add the safe-area bottom to the content inset AGAIN — leaving a
@@ -437,11 +437,10 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}
             offset={{ closed: 0, opened: 0 }}
           >
-            <View
-              ref={composerOverlayRef}
-              onLayout={onComposerLayout}
-              style={{ width: "100%", paddingTop: 8 }}
-            >
+            {/* No paddingTop here: the overlay's measured height becomes the
+                list's bottom inset, so any padding above the pill/composer
+                pushes the resting content floor up by the same amount. */}
+            <View ref={composerOverlayRef} onLayout={onComposerLayout} style={{ width: "100%" }}>
               <Animated.View
                 layout={LinearTransition.duration(220)}
                 style={{ alignSelf: "center", maxWidth: contentMaxWidth, width: "100%" }}

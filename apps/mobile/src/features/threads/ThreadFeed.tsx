@@ -1600,6 +1600,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             // ThreadDetailScreen); this tells LegendList's scroll math about the
             // extra so programmatic end scrolls land at the true resting offset.
             contentInsetEndStaticAdjustment={usesNativeAutomaticInsets ? insets.bottom : 0}
+            // The keyboard integration's offset math (end pinning, max scroll)
+            // must add the same UIKit-added extra, or its keyboard-open end
+            // targets land one safe-area short of the true resting offset.
+            adjustedInsetCompensation={usesNativeAutomaticInsets ? insets.bottom : 0}
             freeze={props.freeze}
             // Animated: on send, the optimistic message's dataChange fires
             // maintainScrollAtEnd before any render-cycle suppression could

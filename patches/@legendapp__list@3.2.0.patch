@@ -1,5 +1,5 @@
 diff --git a/keyboard.d.ts b/keyboard.d.ts
-index 5a115ea..bdfd5c5 100644
+index 5a115ea..2c65d31 100644
 --- a/keyboard.d.ts
 +++ b/keyboard.d.ts
 @@ -269,7 +269,7 @@ type KeyboardChatComposerInsetListRef = {
@@ -11,8 +11,11 @@ index 5a115ea..bdfd5c5 100644
      contentInsetEndAdjustment: SharedValue<number>;
      onComposerLayout: (event: LayoutChangeEvent) => void;
  };
-@@ -280,6 +280,7 @@ declare function useKeyboardScrollToEnd({ freeze: freezeProp, listRef }: UseKeyb
+@@ -278,8 +278,10 @@ declare function useKeyboardScrollToEnd({ freeze: freezeProp, listRef }: UseKeyb
+     scrollMessageToEnd: ({ animated, closeKeyboard }: ScrollMessageToEndOptions) => Promise<void>;
+ };
  declare const KeyboardAwareLegendList: <ItemT>(props: Omit<AnimatedLegendListProps<ItemT>, "anchoredEndSpace" | "contentInsetEndAdjustment" | "renderScrollComponent"> & KeyboardChatScrollViewPropsUnique & {
++    adjustedInsetCompensation?: number;
      anchoredEndSpace?: AnchoredEndSpaceConfig;
      contentInsetEndAdjustment?: SharedValue<number>;
 +    contentInsetEndStaticAdjustment?: number;
@@ -20,10 +23,10 @@ index 5a115ea..bdfd5c5 100644
  } & React.RefAttributes<LegendListRef>) => React.ReactElement | null;
  
 diff --git a/keyboard.js b/keyboard.js
-index 736286a..063458a 100644
+index 736286a..8218172 100644
 --- a/keyboard.js
 +++ b/keyboard.js
-@@ -33,11 +33,12 @@ if (typeof __DEV__ !== "undefined" && __DEV__ && !reactNativeKeyboardController.
+@@ -33,19 +33,19 @@ if (typeof __DEV__ !== "undefined" && __DEV__ && !reactNativeKeyboardController.
      "[legend-list] KeyboardAwareLegendList requires a recent react-native-keyboard-controller with KeyboardChatScrollView. Please upgrade react-native-keyboard-controller to at least 1.21.7."
    );
  }
@@ -38,8 +41,8 @@ index 736286a..063458a 100644
        var _a;
        if (Number.isFinite(height) && height !== lastHeightRef.current) {
          lastHeightRef.current = height;
-@@ -45,7 +46,7 @@ function useKeyboardChatComposerInset(listRef, composerRef, initialHeight = 0) {
-         (_a = listRef.current) == null ? void 0 : _a.reportContentInset({ bottom: height });
+         contentInsetEndAdjustment.value = height;
+-        (_a = listRef.current) == null ? void 0 : _a.reportContentInset({ bottom: height });
        }
      },
 -    [contentInsetEndAdjustment, listRef]
@@ -47,7 +50,11 @@ index 736286a..063458a 100644
    );
    React.useLayoutEffect(() => {
      var _a;
-@@ -87,6 +88,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+@@ -84,9 +84,11 @@ function useKeyboardScrollToEnd({ freeze: freezeProp, listRef }) {
+ }
+ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(props, forwardedRef) {
+   const {
++    adjustedInsetCompensation,
      anchoredEndSpace,
      applyWorkaroundForContentInsetHitTestBug,
      contentInsetEndAdjustment,
@@ -55,7 +62,41 @@ index 736286a..063458a 100644
      freeze,
      keyboardLiftBehavior,
      keyboardOffset,
-@@ -149,6 +151,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+@@ -109,11 +111,15 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+       includeInEndInset: true,
+       onSizeChanged: (size) => {
+         var _a;
+-        blankSpace.value = size;
++        // The anchored blank is sized against the ADJUSTED viewport, but the
++        // scroll component writes it as a raw contentInset that UIKit tops up
++        // with the safe-area bottom — write it net of that or the end rest
++        // (and the anchored message) sinks one safe-area under the header.
++        blankSpace.value = size > 0 ? Math.max(0, size - (adjustedInsetCompensation || 0)) : 0;
+         (_a = anchoredEndSpace.onSizeChanged) == null ? void 0 : _a.call(anchoredEndSpace, size);
+       }
+     };
+-  }, [anchoredEndSpace, blankSpace]);
++  }, [adjustedInsetCompensation, anchoredEndSpace, blankSpace]);
+   const onContentInsetChange = React.useCallback((insets) => {
+     var _a;
+     (_a = refLegendList.current) == null ? void 0 : _a.reportContentInset(insets);
+@@ -124,6 +130,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+         reactNativeKeyboardController.KeyboardChatScrollView,
+         {
+           ...scrollProps,
++          adjustedInsetCompensation,
+           applyWorkaroundForContentInsetHitTestBug,
+           blankSpace,
+           extraContentPadding: contentInsetEndAdjustment,
+@@ -135,6 +142,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+       );
+     },
+     [
++      adjustedInsetCompensation,
+       applyWorkaroundForContentInsetHitTestBug,
+       blankSpace,
+       contentInsetEndAdjustment,
+@@ -149,6 +157,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
      AnimatedLegendListInternal,
      {
        anchoredEndSpace: anchoredEndSpaceWithBlankSpace,
@@ -64,10 +105,10 @@ index 736286a..063458a 100644
        renderScrollComponent: memoList,
        ...rest
 diff --git a/keyboard.mjs b/keyboard.mjs
-index c1dd270..325b0e9 100644
+index c1dd270..cb0d142 100644
 --- a/keyboard.mjs
 +++ b/keyboard.mjs
-@@ -12,11 +12,12 @@ if (typeof __DEV__ !== "undefined" && __DEV__ && !KeyboardChatScrollView) {
+@@ -12,19 +12,19 @@ if (typeof __DEV__ !== "undefined" && __DEV__ && !KeyboardChatScrollView) {
      "[legend-list] KeyboardAwareLegendList requires a recent react-native-keyboard-controller with KeyboardChatScrollView. Please upgrade react-native-keyboard-controller to at least 1.21.7."
    );
  }
@@ -82,8 +123,8 @@ index c1dd270..325b0e9 100644
        var _a;
        if (Number.isFinite(height) && height !== lastHeightRef.current) {
          lastHeightRef.current = height;
-@@ -24,7 +25,7 @@ function useKeyboardChatComposerInset(listRef, composerRef, initialHeight = 0) {
-         (_a = listRef.current) == null ? void 0 : _a.reportContentInset({ bottom: height });
+         contentInsetEndAdjustment.value = height;
+-        (_a = listRef.current) == null ? void 0 : _a.reportContentInset({ bottom: height });
        }
      },
 -    [contentInsetEndAdjustment, listRef]
@@ -91,7 +132,11 @@ index c1dd270..325b0e9 100644
    );
    useLayoutEffect(() => {
      var _a;
-@@ -66,6 +67,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+@@ -63,9 +63,11 @@ function useKeyboardScrollToEnd({ freeze: freezeProp, listRef }) {
+ }
+ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(props, forwardedRef) {
+   const {
++    adjustedInsetCompensation,
      anchoredEndSpace,
      applyWorkaroundForContentInsetHitTestBug,
      contentInsetEndAdjustment,
@@ -99,7 +144,41 @@ index c1dd270..325b0e9 100644
      freeze,
      keyboardLiftBehavior,
      keyboardOffset,
-@@ -128,6 +130,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+@@ -88,11 +90,15 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+       includeInEndInset: true,
+       onSizeChanged: (size) => {
+         var _a;
+-        blankSpace.value = size;
++        // The anchored blank is sized against the ADJUSTED viewport, but the
++        // scroll component writes it as a raw contentInset that UIKit tops up
++        // with the safe-area bottom — write it net of that or the end rest
++        // (and the anchored message) sinks one safe-area under the header.
++        blankSpace.value = size > 0 ? Math.max(0, size - (adjustedInsetCompensation || 0)) : 0;
+         (_a = anchoredEndSpace.onSizeChanged) == null ? void 0 : _a.call(anchoredEndSpace, size);
+       }
+     };
+-  }, [anchoredEndSpace, blankSpace]);
++  }, [adjustedInsetCompensation, anchoredEndSpace, blankSpace]);
+   const onContentInsetChange = useCallback((insets) => {
+     var _a;
+     (_a = refLegendList.current) == null ? void 0 : _a.reportContentInset(insets);
+@@ -103,6 +109,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+         KeyboardChatScrollView,
+         {
+           ...scrollProps,
++          adjustedInsetCompensation,
+           applyWorkaroundForContentInsetHitTestBug,
+           blankSpace,
+           extraContentPadding: contentInsetEndAdjustment,
+@@ -114,6 +121,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
+       );
+     },
+     [
++      adjustedInsetCompensation,
+       applyWorkaroundForContentInsetHitTestBug,
+       blankSpace,
+       contentInsetEndAdjustment,
+@@ -128,6 +136,7 @@ var KeyboardAwareLegendList = typedForwardRef(function KeyboardAwareLegendList2(
      AnimatedLegendListInternal,
      {
        anchoredEndSpace: anchoredEndSpaceWithBlankSpace,
@@ -125,7 +204,7 @@ index 72d3f59..435a5fc 100644
       * Number of columns to render items in.
       * @default 1
 diff --git a/react-native.js b/react-native.js
-index 8d4ff89..cc6c956 100644
+index 8d4ff89..618e7e3 100644
 --- a/react-native.js
 +++ b/react-native.js
 @@ -1480,18 +1480,23 @@ function calculateOffsetWithOffsetPosition(ctx, offsetParam, params) {
@@ -250,20 +329,25 @@ index 8d4ff89..cc6c956 100644
                state.scroll = maxScroll;
                state.scrollPending = maxScroll;
                diff = 0;
-@@ -2374,8 +2402,64 @@ function scrollToIndex(ctx, {
+@@ -2374,8 +2402,72 @@ function scrollToIndex(ctx, {
  }
  
  // src/core/initialScroll.ts
 +var INSET_END_SETTLE_WATCHDOG_FRAMES = 150;
++var INSET_END_SETTLE_WATCHDOG_STABLE_FRAMES = 20;
 +function startInsetEndSettleWatchdog(ctx) {
 +  const state = ctx.state;
 +  if (state.insetEndSettleWatchdogActive) {
 +    return;
 +  }
 +  state.insetEndSettleWatchdogActive = true;
++  state.didUserDrag = false;
 +  let frames = 0;
++  let settledFrames = 0;
 +  const tick = () => {
-+    if (frames++ >= INSET_END_SETTLE_WATCHDOG_FRAMES || !ctx.state || ctx.state !== state) {
++    // The user owns the scroll from their first drag — a re-pin here would
++    // pin the list under their finger.
++    if (frames++ >= INSET_END_SETTLE_WATCHDOG_FRAMES || settledFrames >= INSET_END_SETTLE_WATCHDOG_STABLE_FRAMES || state.didUserDrag || !ctx.state || ctx.state !== state) {
 +      state.insetEndSettleWatchdogActive = false;
 +      return;
 +    }
@@ -278,10 +362,13 @@ index 8d4ff89..cc6c956 100644
 +      // While still near the end (never fighting a user who scrolled away),
 +      // re-pin to the current true end until sizes stop changing.
 +      if (Math.abs(distance) > 2 && Math.abs(distance) <= scrollLength * 0.5) {
++        settledFrames = 0;
 +        const scroller = state.refScroller.current;
 +        if (scroller) {
 +          scroller.scrollTo({ animated: false, x: 0, y: endOffset });
 +        }
++      } else {
++        settledFrames++;
 +      }
 +    }
 +    requestAnimationFrame(tick);
@@ -315,7 +402,7 @@ index 8d4ff89..cc6c956 100644
    const requestedIndex = target.index;
    const index = requestedIndex !== void 0 ? clampScrollIndex(requestedIndex, ctx.state.props.data.length) : void 0;
    const itemSize = getItemSizeAtIndex(ctx, index);
-@@ -2804,7 +2888,9 @@ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
+@@ -2804,7 +2896,9 @@ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
      return;
    }
    if (didFinishedInitialScrollMoveAwayFromTarget(ctx, initialScroll)) {
@@ -326,7 +413,7 @@ index 8d4ff89..cc6c956 100644
      if (!shouldKeepEndTargetAlive) {
        if (shouldPreserveInitialScrollForFooterLayout(initialScroll)) {
          clearPendingInitialScrollFooterLayout(ctx, {
-@@ -4646,7 +4732,8 @@ function maybeUpdateAnchoredEndSpace(ctx) {
+@@ -4646,7 +4740,8 @@ function maybeUpdateAnchoredEndSpace(ctx) {
        }
        contentBelowAnchor += footerSize + stylePaddingBottom;
        isReady = !hasUnknownTailSize;
@@ -336,7 +423,7 @@ index 8d4ff89..cc6c956 100644
      } else if (anchorIndex >= 0) {
        isReady = false;
      }
-@@ -4664,6 +4751,12 @@ function maybeUpdateAnchoredEndSpace(ctx) {
+@@ -4664,6 +4759,12 @@ function maybeUpdateAnchoredEndSpace(ctx) {
        updateScroll(ctx, state.scroll, true);
      }
      (_b = anchoredEndSpace == null ? void 0 : anchoredEndSpace.onReady) == null ? void 0 : _b.call(anchoredEndSpace, { anchorIndex: nextAnchorIndex, anchorKey: nextAnchorKey, size: nextSize });
@@ -349,7 +436,7 @@ index 8d4ff89..cc6c956 100644
    }
    return nextSize;
  }
-@@ -6462,6 +6555,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+@@ -6462,6 +6563,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
      dataVersion,
      drawDistance = 250,
      contentInsetEndAdjustment,
@@ -357,7 +444,15 @@ index 8d4ff89..cc6c956 100644
      estimatedItemSize = 100,
      estimatedListSize,
      extraData,
-@@ -6710,6 +6804,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+@@ -6492,6 +6594,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onLayout: onLayoutProp,
+     onLoad,
+     onMomentumScrollEnd,
++    onScrollBeginDrag,
+     onRefresh,
+     onScroll: onScrollProp,
+     onStartReached,
+@@ -6710,6 +6813,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
      contentContainerAlignItems: contentContainerStyle.alignItems,
      contentInset,
      contentInsetEndAdjustment: contentInsetEndAdjustmentResolved,
@@ -365,7 +460,7 @@ index 8d4ff89..cc6c956 100644
      data: dataProp,
      dataVersion,
      drawDistance,
-@@ -6789,6 +6884,13 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+@@ -6789,6 +6893,13 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
        return void 0;
      }
      const resolvedOffset = (_a4 = initialScroll.contentOffset) != null ? _a4 : resolveInitialScrollOffset(ctx, initialScroll);
@@ -379,8 +474,29 @@ index 8d4ff89..cc6c956 100644
      return usesBootstrapInitialScroll && ((_b2 = state.initialScrollSession) == null ? void 0 : _b2.kind) === "bootstrap" && Platform.OS === "web" ? void 0 : resolvedOffset;
    }, [usesBootstrapInitialScroll]);
    React2.useLayoutEffect(() => {
+@@ -6995,6 +7106,12 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+           onMomentumScrollEnd(event);
+         }
+       },
++      onScrollBeginDrag: (event) => {
++        ctx.state.didUserDrag = true;
++        if (onScrollBeginDrag) {
++          onScrollBeginDrag(event);
++        }
++      },
+       onScroll: (event) => onScroll(ctx, event)
+     }),
+     []
+@@ -7019,6 +7136,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onLayout,
+       onLayoutFooter,
+       onMomentumScrollEnd: fns.onMomentumScrollEnd,
++      onScrollBeginDrag: fns.onScrollBeginDrag,
+       onScroll: onScrollHandler,
+       recycleItems,
+       refreshControl: refreshControlElement ? stylePaddingTopState > 0 ? React2__namespace.cloneElement(refreshControlElement, {
 diff --git a/react-native.mjs b/react-native.mjs
-index 2e96ca7..f8a7765 100644
+index 2e96ca7..84e167b 100644
 --- a/react-native.mjs
 +++ b/react-native.mjs
 @@ -1459,18 +1459,23 @@ function calculateOffsetWithOffsetPosition(ctx, offsetParam, params) {
@@ -505,20 +621,25 @@ index 2e96ca7..f8a7765 100644
                state.scroll = maxScroll;
                state.scrollPending = maxScroll;
                diff = 0;
-@@ -2353,8 +2381,64 @@ function scrollToIndex(ctx, {
+@@ -2353,8 +2381,72 @@ function scrollToIndex(ctx, {
  }
  
  // src/core/initialScroll.ts
 +var INSET_END_SETTLE_WATCHDOG_FRAMES = 150;
++var INSET_END_SETTLE_WATCHDOG_STABLE_FRAMES = 20;
 +function startInsetEndSettleWatchdog(ctx) {
 +  const state = ctx.state;
 +  if (state.insetEndSettleWatchdogActive) {
 +    return;
 +  }
 +  state.insetEndSettleWatchdogActive = true;
++  state.didUserDrag = false;
 +  let frames = 0;
++  let settledFrames = 0;
 +  const tick = () => {
-+    if (frames++ >= INSET_END_SETTLE_WATCHDOG_FRAMES || !ctx.state || ctx.state !== state) {
++    // The user owns the scroll from their first drag — a re-pin here would
++    // pin the list under their finger.
++    if (frames++ >= INSET_END_SETTLE_WATCHDOG_FRAMES || settledFrames >= INSET_END_SETTLE_WATCHDOG_STABLE_FRAMES || state.didUserDrag || !ctx.state || ctx.state !== state) {
 +      state.insetEndSettleWatchdogActive = false;
 +      return;
 +    }
@@ -533,10 +654,13 @@ index 2e96ca7..f8a7765 100644
 +      // While still near the end (never fighting a user who scrolled away),
 +      // re-pin to the current true end until sizes stop changing.
 +      if (Math.abs(distance) > 2 && Math.abs(distance) <= scrollLength * 0.5) {
++        settledFrames = 0;
 +        const scroller = state.refScroller.current;
 +        if (scroller) {
 +          scroller.scrollTo({ animated: false, x: 0, y: endOffset });
 +        }
++      } else {
++        settledFrames++;
 +      }
 +    }
 +    requestAnimationFrame(tick);
@@ -570,7 +694,7 @@ index 2e96ca7..f8a7765 100644
    const requestedIndex = target.index;
    const index = requestedIndex !== void 0 ? clampScrollIndex(requestedIndex, ctx.state.props.data.length) : void 0;
    const itemSize = getItemSizeAtIndex(ctx, index);
-@@ -2783,7 +2867,9 @@ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
+@@ -2783,7 +2875,9 @@ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
      return;
    }
    if (didFinishedInitialScrollMoveAwayFromTarget(ctx, initialScroll)) {
@@ -581,7 +705,7 @@ index 2e96ca7..f8a7765 100644
      if (!shouldKeepEndTargetAlive) {
        if (shouldPreserveInitialScrollForFooterLayout(initialScroll)) {
          clearPendingInitialScrollFooterLayout(ctx, {
-@@ -4625,7 +4711,8 @@ function maybeUpdateAnchoredEndSpace(ctx) {
+@@ -4625,7 +4719,8 @@ function maybeUpdateAnchoredEndSpace(ctx) {
        }
        contentBelowAnchor += footerSize + stylePaddingBottom;
        isReady = !hasUnknownTailSize;
@@ -591,7 +715,7 @@ index 2e96ca7..f8a7765 100644
      } else if (anchorIndex >= 0) {
        isReady = false;
      }
-@@ -4643,6 +4730,12 @@ function maybeUpdateAnchoredEndSpace(ctx) {
+@@ -4643,6 +4738,12 @@ function maybeUpdateAnchoredEndSpace(ctx) {
        updateScroll(ctx, state.scroll, true);
      }
      (_b = anchoredEndSpace == null ? void 0 : anchoredEndSpace.onReady) == null ? void 0 : _b.call(anchoredEndSpace, { anchorIndex: nextAnchorIndex, anchorKey: nextAnchorKey, size: nextSize });
@@ -604,7 +728,7 @@ index 2e96ca7..f8a7765 100644
    }
    return nextSize;
  }
-@@ -6441,6 +6534,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+@@ -6441,6 +6542,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
      dataVersion,
      drawDistance = 250,
      contentInsetEndAdjustment,
@@ -612,7 +736,15 @@ index 2e96ca7..f8a7765 100644
      estimatedItemSize = 100,
      estimatedListSize,
      extraData,
-@@ -6689,6 +6783,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+@@ -6471,6 +6573,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onLayout: onLayoutProp,
+     onLoad,
+     onMomentumScrollEnd,
++    onScrollBeginDrag,
+     onRefresh,
+     onScroll: onScrollProp,
+     onStartReached,
+@@ -6689,6 +6792,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
      contentContainerAlignItems: contentContainerStyle.alignItems,
      contentInset,
      contentInsetEndAdjustment: contentInsetEndAdjustmentResolved,
@@ -620,7 +752,7 @@ index 2e96ca7..f8a7765 100644
      data: dataProp,
      dataVersion,
      drawDistance,
-@@ -6768,6 +6863,13 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+@@ -6768,6 +6872,13 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
        return void 0;
      }
      const resolvedOffset = (_a4 = initialScroll.contentOffset) != null ? _a4 : resolveInitialScrollOffset(ctx, initialScroll);
@@ -634,6 +766,27 @@ index 2e96ca7..f8a7765 100644
      return usesBootstrapInitialScroll && ((_b2 = state.initialScrollSession) == null ? void 0 : _b2.kind) === "bootstrap" && Platform.OS === "web" ? void 0 : resolvedOffset;
    }, [usesBootstrapInitialScroll]);
    useLayoutEffect(() => {
+@@ -6974,6 +7085,12 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+           onMomentumScrollEnd(event);
+         }
+       },
++      onScrollBeginDrag: (event) => {
++        ctx.state.didUserDrag = true;
++        if (onScrollBeginDrag) {
++          onScrollBeginDrag(event);
++        }
++      },
+       onScroll: (event) => onScroll(ctx, event)
+     }),
+     []
+@@ -6998,6 +7115,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onLayout,
+       onLayoutFooter,
+       onMomentumScrollEnd: fns.onMomentumScrollEnd,
++      onScrollBeginDrag: fns.onScrollBeginDrag,
+       onScroll: onScrollHandler,
+       recycleItems,
+       refreshControl: refreshControlElement ? stylePaddingTopState > 0 ? React2.cloneElement(refreshControlElement, {
 diff --git a/reanimated.d.ts b/reanimated.d.ts
 index 7e2d11f..d5b0d66 100644
 --- a/reanimated.d.ts

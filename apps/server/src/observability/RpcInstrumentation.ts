@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Metric from "effect/Metric";
 import * as References from "effect/References";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
 import { outcomeFromExit } from "./Attributes.ts";
@@ -123,7 +124,14 @@ export const observeRpcStreamEffect = <A, StreamError, StreamContext, EffectErro
   method: string,
   effect: Effect.Effect<Stream.Stream<A, StreamError, StreamContext>, EffectError, EffectContext>,
   traceAttributes?: Readonly<Record<string, unknown>>,
-): Stream.Stream<A, StreamError | EffectError, StreamContext | EffectContext> => {
+  // `Stream.unwrap` scopes the setup effect to the stream's lifetime, so a
+  // `Scope` requirement (e.g. PubSub subscriptions attached before a snapshot
+  // is loaded) is satisfied by the stream itself rather than the caller.
+): Stream.Stream<
+  A,
+  StreamError | EffectError,
+  StreamContext | Exclude<EffectContext, Scope.Scope>
+> => {
   const instrumented = Stream.unwrap(
     Effect.gen(function* () {
       const startedAt = yield* Clock.currentTimeNanos;

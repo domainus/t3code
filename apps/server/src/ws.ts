@@ -1119,7 +1119,12 @@ const makeWsRpcLayer = (
                 event.aggregateId === input.threadId &&
                 isThreadDetailEvent(event);
 
-              const liveStream = orchestrationEngine.streamDomainEvents.pipe(
+              // Attach the domain event subscription before loading the
+              // snapshot/catch-up baseline: the PubSub does not buffer for
+              // late subscribers, so events published while the baseline is
+              // read would otherwise be dropped. Overlapping events are
+              // deduped by sequence on the client.
+              const liveStream = (yield* orchestrationEngine.subscribeDomainEvents).pipe(
                 Stream.filter(isThisThreadDetailEvent),
                 Stream.map((event) => ({
                   kind: "event" as const,
@@ -1131,26 +1136,29 @@ const makeWsRpcLayer = (
               // that snapshot's sequence, and we resume the live subscription by
               // replaying persisted events after it instead of re-sending the
               // (potentially multi-KB) snapshot frame over the socket. The
-              // catch-up replay + live stream carry the same ordering guarantees
-              // as the snapshot-then-live path below; overlapping events are
-              // deduped by sequence on the client.
+              // catch-up replay must be exhaustive — a truncated replay would
+              // silently drop thread updates — so it bypasses the default
+              // replay cap.
               if (input.afterSequence !== undefined) {
-                const catchUpStream = orchestrationEngine.readEvents(input.afterSequence).pipe(
-                  Stream.filter(isThisThreadDetailEvent),
-                  Stream.map((event) => ({ kind: "event" as const, event })),
-                  Stream.mapError(
-                    (cause) =>
-                      new OrchestrationGetSnapshotError({
-                        message: `Failed to replay thread ${input.threadId} events`,
-                        cause,
-                      }),
-                  ),
-                );
+                const catchUpStream = orchestrationEngine
+                  .readEvents(input.afterSequence, Number.MAX_SAFE_INTEGER)
+                  .pipe(
+                    Stream.filter(isThisThreadDetailEvent),
+                    Stream.map((event) => ({ kind: "event" as const, event })),
+                    Stream.mapError(
+                      (cause) =>
+                        new OrchestrationGetSnapshotError({
+                          message: `Failed to replay thread ${input.threadId} events`,
+                          cause,
+                        }),
+                    ),
+                  );
                 return Stream.concat(catchUpStream, liveStream);
               }
 
-              const [threadDetail, snapshotSequence] = yield* Effect.all([
-                projectionSnapshotQuery.getThreadDetailById(input.threadId).pipe(
+              const threadSnapshot = yield* projectionSnapshotQuery
+                .getThreadDetailSnapshot(input.threadId)
+                .pipe(
                   Effect.mapError(
                     (cause) =>
                       new OrchestrationGetSnapshotError({
@@ -1158,20 +1166,9 @@ const makeWsRpcLayer = (
                         cause,
                       }),
                   ),
-                ),
-                projectionSnapshotQuery.getSnapshotSequence().pipe(
-                  Effect.map(({ snapshotSequence }) => snapshotSequence),
-                  Effect.mapError(
-                    (cause) =>
-                      new OrchestrationGetSnapshotError({
-                        message: "Failed to load orchestration snapshot sequence",
-                        cause,
-                      }),
-                  ),
-                ),
-              ]);
+                );
 
-              if (Option.isNone(threadDetail)) {
+              if (Option.isNone(threadSnapshot)) {
                 return yield* new OrchestrationGetSnapshotError({
                   message: `Thread ${input.threadId} was not found`,
                   cause: input.threadId,
@@ -1181,10 +1178,7 @@ const makeWsRpcLayer = (
               return Stream.concat(
                 Stream.make({
                   kind: "snapshot" as const,
-                  snapshot: {
-                    snapshotSequence,
-                    thread: threadDetail.value,
-                  },
+                  snapshot: threadSnapshot.value,
                 }),
                 liveStream,
               );

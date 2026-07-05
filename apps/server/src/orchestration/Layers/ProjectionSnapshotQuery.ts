@@ -2033,6 +2033,23 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       );
     });
 
+  const getThreadDetailSnapshot: ProjectionSnapshotQueryShape["getThreadDetailSnapshot"] = (
+    threadId,
+  ) =>
+    sql.withTransaction(Effect.all([getThreadDetailById(threadId), getSnapshotSequence()])).pipe(
+      Effect.map(([threadDetail, { snapshotSequence }]) =>
+        Option.map(threadDetail, (thread) => ({ snapshotSequence, thread })),
+      ),
+      Effect.mapError((error) => {
+        if (isPersistenceError(error)) {
+          return error;
+        }
+        return toPersistenceSqlError("ProjectionSnapshotQuery.getThreadDetailSnapshot:query")(
+          error,
+        );
+      }),
+    );
+
   return {
     getCommandReadModel,
     getSnapshot,
@@ -2047,6 +2064,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getFullThreadDiffContext,
     getThreadShellById,
     getThreadDetailById,
+    getThreadDetailSnapshot,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

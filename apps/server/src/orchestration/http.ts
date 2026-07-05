@@ -45,18 +45,17 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
         Effect.fn("environment.orchestration.threadSnapshot")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);
           yield* requireEnvironmentScope(AuthOrchestrationReadScope);
-          const [threadDetail, { snapshotSequence }] = yield* Effect.all([
-            projectionSnapshotQuery.getThreadDetailById(args.params.threadId),
-            projectionSnapshotQuery.getSnapshotSequence(),
-          ]).pipe(
-            Effect.catch((cause) =>
-              failEnvironmentInternal("orchestration_thread_snapshot_failed", cause),
-            ),
-          );
-          if (Option.isNone(threadDetail)) {
+          const snapshot = yield* projectionSnapshotQuery
+            .getThreadDetailSnapshot(args.params.threadId)
+            .pipe(
+              Effect.catch((cause) =>
+                failEnvironmentInternal("orchestration_thread_snapshot_failed", cause),
+              ),
+            );
+          if (Option.isNone(snapshot)) {
             return yield* failEnvironmentNotFound("thread_not_found");
           }
-          return { snapshotSequence, thread: threadDetail.value };
+          return snapshot.value;
         }),
       )
       .handle(

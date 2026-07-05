@@ -13,6 +13,7 @@
 import type { OrchestrationCommand, OrchestrationEvent } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
@@ -26,10 +27,14 @@ export interface OrchestrationEngineShape {
    * Replay persisted orchestration events from an exclusive sequence cursor.
    *
    * @param fromSequenceExclusive - Sequence cursor (exclusive).
+   * @param limit - Optional maximum number of events to replay. Defaults to
+   *   the event store's replay cap; pass `Number.MAX_SAFE_INTEGER` for an
+   *   exhaustive catch-up replay.
    * @returns Stream containing ordered events.
    */
   readonly readEvents: (
     fromSequenceExclusive: number,
+    limit?: number,
   ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError, never>;
 
   /**
@@ -49,8 +54,26 @@ export interface OrchestrationEngineShape {
    * Stream persisted domain events in dispatch order.
    *
    * This is a hot runtime stream (new events only), not a historical replay.
+   * The underlying PubSub subscription is only attached once the stream is
+   * pulled; use `subscribeDomainEvents` when the subscription must be
+   * attached before other work (e.g. loading a snapshot baseline).
    */
   readonly streamDomainEvents: Stream.Stream<OrchestrationEvent>;
+
+  /**
+   * Attach a domain event subscription immediately and return the stream of
+   * events it receives.
+   *
+   * Unlike `streamDomainEvents`, events published between running this effect
+   * and pulling the returned stream are buffered by the subscription instead
+   * of dropped, which is required for snapshot/catch-up + live combinations.
+   * The subscription is released when the surrounding scope closes.
+   */
+  readonly subscribeDomainEvents: Effect.Effect<
+    Stream.Stream<OrchestrationEvent>,
+    never,
+    Scope.Scope
+  >;
 }
 
 /**

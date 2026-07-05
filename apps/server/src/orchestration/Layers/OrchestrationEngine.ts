@@ -306,8 +306,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     Effect.annotateLogs({ sequence: commandReadModel.snapshotSequence }),
   );
 
-  const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive) =>
-    eventStore.readFromSequence(fromSequenceExclusive);
+  const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive, limit) =>
+    eventStore.readFromSequence(fromSequenceExclusive, limit);
 
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
     Effect.gen(function* () {
@@ -329,6 +329,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
       return Stream.fromPubSub(eventPubSub);
     },
+    subscribeDomainEvents: Effect.map(PubSub.subscribe(eventPubSub), Stream.fromSubscription),
   } satisfies OrchestrationEngineShape;
 });
 

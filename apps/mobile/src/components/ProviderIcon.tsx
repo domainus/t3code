@@ -10,6 +10,17 @@ export function ProviderIcon(props: ProviderIconProps) {
   const isDarkMode = useColorScheme() === "dark";
   const size = props.size ?? 16;
 
+  if (props.provider === "pi") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 256 256" fill="none">
+        <Path
+          fill={isDarkMode ? "#e5e5e5" : "#171717"}
+          d="M67 198V58h62c18 0 32 5 43 14 10 9 15 22 15 38 0 15-5 28-16 37-10 9-25 14-43 14H99v37H67Zm32-64h27c9 0 16-2 21-6 5-5 8-11 8-18s-3-13-8-18c-5-4-12-6-21-6H99v48Z"
+        />
+      </Svg>
+    );
+  }
+
   if (props.provider === "claudeAgent") {
     return (
       <Svg width={size} height={size} viewBox="0 0 256 257" fill="none">

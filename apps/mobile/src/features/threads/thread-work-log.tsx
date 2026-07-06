@@ -4,6 +4,7 @@ import { LayoutAnimation, Pressable, ScrollView, useColorScheme, View } from "re
 
 import { AppText as Text } from "../../components/AppText";
 import { cn } from "../../lib/cn";
+import { stripShellWrapper } from "../../lib/shellWrapper";
 import type { ThreadFeedActivity } from "../../lib/threadActivity";
 
 const WORK_LOG_LAYOUT_ANIMATION = {
@@ -22,12 +23,6 @@ const WORK_LOG_LAYOUT_ANIMATION = {
 function triggerDisclosureFeedback() {
   LayoutAnimation.configureNext(WORK_LOG_LAYOUT_ANIMATION);
   void Haptics.selectionAsync();
-}
-
-function stripShellWrapper(value: string): string {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^\/bin\/zsh -lc ['"]?([\s\S]*?)['"]?$/);
-  return (match?.[1] ?? trimmed).trim();
 }
 
 function compactActivityDetail(detail: string | null): string | null {

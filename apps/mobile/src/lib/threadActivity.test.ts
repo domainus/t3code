@@ -211,6 +211,56 @@ describe("buildThreadFeed", () => {
     });
   });
 
+  it("collapses mobile task progress with matching completion", () => {
+    const turnId = TurnId.make("turn-thinking-complete");
+    const thread = makeThread({
+      id: ThreadId.make("thread-thinking-complete"),
+      projectId: ProjectId.make("project-1"),
+      title: "Completed thinking trace",
+      activities: [
+        makeActivity({
+          id: EventId.make("thinking-progress"),
+          kind: "task.progress",
+          tone: "info",
+          summary: "Reasoning update",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId,
+          payload: {
+            taskId: "pi-thinking-turn-thinking-complete",
+            taskType: "reasoning",
+            summary: "Thinking about the request",
+          },
+        }),
+        makeActivity({
+          id: EventId.make("thinking-completed"),
+          kind: "task.completed",
+          tone: "info",
+          summary: "Task completed",
+          createdAt: "2026-04-01T00:00:03.000Z",
+          turnId,
+          payload: {
+            taskId: "pi-thinking-turn-thinking-complete",
+            status: "completed",
+            detail: "Thinking complete",
+          },
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread);
+    const group = feed[0];
+    expect(group).toMatchObject({ type: "activity-group" });
+    if (!group || group.type !== "activity-group") return;
+    expect(group.activities).toHaveLength(1);
+    expect(group.activities[0]).toMatchObject({
+      id: "thinking-completed",
+      summary: "Thinking",
+      icon: "agent",
+      toolLike: true,
+      status: null,
+    });
+  });
+
   it("keeps MCP inputs available to expanded mobile work rows", () => {
     const turnId = TurnId.make("turn-mcp");
     const thread = makeThread({

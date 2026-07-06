@@ -187,3 +187,31 @@ it.effect("PiAdapter reconciles final text containing already-streamed text with
     NodeAssert.deepEqual(assistantDeltas, ["world", "!"]);
   }),
 );
+
+it.effect("PiAdapter fails and clears active turn when prompt RPC fails", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    write({ type: "response", id: msg.id, command: msg.type, success: false, error: "prompt failed" });
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 8)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-prompt-fail-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    const exit = yield* Effect.exit(adapter.sendTurn({ threadId, input: "test" }));
+    NodeAssert.equal(exit._tag, "Failure");
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "failed"));
+    const sessions = yield* adapter.listSessions();
+    NodeAssert.equal(sessions[0]?.status, "error");
+    NodeAssert.equal(sessions[0]?.activeTurnId, undefined);
+  }),
+);

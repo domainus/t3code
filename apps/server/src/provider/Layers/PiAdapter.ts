@@ -1036,8 +1036,10 @@ export const makePiAdapter = (
               }),
       });
 
-    const sendTurn: ProviderAdapterShape<PiAdapterError>["sendTurn"] = (input) =>
-      Effect.tryPromise({
+    const sendTurn: ProviderAdapterShape<PiAdapterError>["sendTurn"] = (input) => {
+      let startedCtx: PiSessionContext | undefined;
+      let startedTurnId: TurnId | undefined;
+      return Effect.tryPromise({
         try: async () => {
           const ctx = requireSession(input.threadId);
           const message = input.input?.trim();
@@ -1104,6 +1106,8 @@ export const makePiAdapter = (
             return { threadId: input.threadId, turnId, resumeCursor: ctx.session.resumeCursor };
           }
           const turnId = TurnId.make(NodeCrypto.randomUUID());
+          startedCtx = ctx;
+          startedTurnId = turnId;
           ctx.activeTurnId = turnId;
           ctx.turns.push({ id: turnId, items: [] });
           ctx.session = {
@@ -1143,14 +1147,33 @@ export const makePiAdapter = (
           ) {
             return cause;
           }
+          const detail = cause instanceof Error ? cause.message : String(cause);
+          if (startedCtx && startedTurnId && startedCtx.activeTurnId === startedTurnId) {
+            completeReasoningTask(input.threadId, startedCtx, startedTurnId, { type: "prompt_error", detail });
+            emit({
+              type: "turn.completed",
+              ...stamp(input.threadId, startedTurnId),
+              payload: { state: "failed", stopReason: "prompt_error", errorMessage: detail },
+            } as ProviderRuntimeEvent);
+            startedCtx.activeTurnId = undefined;
+            const { activeTurnId: _activeTurnId, ...sessionWithoutActiveTurn } = startedCtx.session;
+            void _activeTurnId;
+            startedCtx.session = {
+              ...sessionWithoutActiveTurn,
+              status: "error",
+              lastError: detail,
+              updatedAt: new Date().toISOString(),
+            };
+          }
           return new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "prompt",
-            detail: cause instanceof Error ? cause.message : String(cause),
+            detail,
             cause,
           });
         },
       });
+    };
 
     return {
       provider: PROVIDER,

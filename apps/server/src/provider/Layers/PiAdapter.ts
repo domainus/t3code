@@ -832,14 +832,7 @@ export const makePiAdapter = (
         if (Array.isArray(record.messages)) {
           const finalAssistant = [...record.messages]
             .reverse()
-            .find((message) =>
-              Boolean(
-                message &&
-                  typeof message === "object" &&
-                  ((message as Record<string, unknown>).role === "assistant" ||
-                    (message as Record<string, unknown>).role === "custom"),
-              ),
-            );
+            .find((message) => assistantTextFromPiMessage(message) !== undefined);
           reconcileAssistantText(threadId, ctx, turnId, finalAssistant, raw);
         }
         completeSuccessfulTurn(threadId, ctx, turnId, raw);

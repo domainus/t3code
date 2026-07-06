@@ -774,7 +774,7 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]?.label).toBe("Searching for API endpoints");
   });
 
-  it("collapses task.progress and task.completed for the same task", () => {
+  it("collapses repeated task.progress and task.completed for the same task", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "task-progress",
@@ -783,6 +783,14 @@ describe("deriveWorkLogEntries", () => {
         summary: "Reasoning update",
         tone: "info",
         payload: { taskId: "reasoning-1", summary: "Searching" },
+      }),
+      makeActivity({
+        id: "task-progress-next",
+        createdAt: "2026-02-23T00:00:02.500Z",
+        kind: "task.progress",
+        summary: "Reasoning update",
+        tone: "info",
+        payload: { taskId: "reasoning-1", summary: "Reading results" },
       }),
       makeActivity({
         id: "task-completed",

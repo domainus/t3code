@@ -232,6 +232,19 @@ describe("buildThreadFeed", () => {
           },
         }),
         makeActivity({
+          id: EventId.make("thinking-progress-next"),
+          kind: "task.progress",
+          tone: "info",
+          summary: "Reasoning update",
+          createdAt: "2026-04-01T00:00:02.500Z",
+          turnId,
+          payload: {
+            taskId: "pi-thinking-turn-thinking-complete",
+            taskType: "reasoning",
+            summary: "Reading results",
+          },
+        }),
+        makeActivity({
           id: EventId.make("thinking-completed"),
           kind: "task.completed",
           tone: "info",

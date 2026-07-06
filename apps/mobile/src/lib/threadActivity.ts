@@ -372,7 +372,7 @@ function shouldCollapseTaskLifecycleEntries(
 ): boolean {
   return (
     previous.activityKind === "task.progress" &&
-    next.activityKind === "task.completed" &&
+    (next.activityKind === "task.progress" || next.activityKind === "task.completed") &&
     previous.taskId !== undefined &&
     previous.taskId === next.taskId
   );

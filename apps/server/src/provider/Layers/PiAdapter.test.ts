@@ -284,7 +284,7 @@ it.effect("PiAdapter reconciles last text-bearing agent_end message", () =>
       writeFakePiScript(`
     write({ type: "agent_end", messages: [
       { role: "assistant", content: [{ type: "text", text: "Visible answer" }] },
-      { role: "custom", content: [] }
+      { role: "custom", content: [{ type: "text", text: "Pi memory context for this project" }] }
     ] });
 `),
     );
@@ -308,7 +308,7 @@ it.effect("PiAdapter reconciles last text-bearing agent_end message", () =>
   }),
 );
 
-it.effect("PiAdapter reconciles custom agent_end text as assistant output", () =>
+it.effect("PiAdapter ignores custom-only agent_end text", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>
       writeFakePiScript(`
@@ -330,17 +330,18 @@ it.effect("PiAdapter reconciles custom agent_end text as assistant output", () =
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
-    NodeAssert.deepEqual(assistantDeltas, ["Custom final answer"]);
+    NodeAssert.deepEqual(assistantDeltas, []);
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "completed"));
   }),
 );
 
-it.effect("PiAdapter completes turn from custom message_end text", () =>
+it.effect("PiAdapter ignores custom message_end text", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>
       writeFakePiScript(`
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Partial" } });
-    write({ type: "message_end", message: { role: "custom", content: [{ type: "text", text: "Partial final answer" }] } });
+    write({ type: "message_end", message: { role: "custom", content: [{ type: "text", text: "Pi memory context for this project" }] } });
+    write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Partial answer" }] }] });
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
@@ -358,7 +359,7 @@ it.effect("PiAdapter completes turn from custom message_end text", () =>
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
-    NodeAssert.deepEqual(assistantDeltas, ["Partial", " final answer"]);
+    NodeAssert.deepEqual(assistantDeltas, ["Partial", " answer"]);
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "completed"));
     const sessions = yield* adapter.listSessions();
     NodeAssert.equal(sessions[0]?.status, "ready");

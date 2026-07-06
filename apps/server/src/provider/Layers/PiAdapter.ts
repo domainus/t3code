@@ -155,11 +155,10 @@ function appendReasoningSummary(previous: string, delta: string): string {
 function assistantTextFromPiMessage(message: unknown): string | undefined {
   if (!message || typeof message !== "object") return undefined;
   const record = message as Record<string, unknown>;
-  // Pi can emit assistant-visible text as either an assistant message or a
-  // custom message. Paseo renders custom message_end text as assistant output;
-  // doing the same here prevents the response bubble from staying truncated
-  // when Pi finalizes generated text through that channel.
-  if (record.role !== "assistant" && record.role !== "custom") return undefined;
+  // Only assistant messages are final answer candidates. Pi also emits custom
+  // messages for injected context (for example Pi memory context); treating
+  // those as assistant output leaks prompt/context material into the chat.
+  if (record.role !== "assistant") return undefined;
   const text = readPiTextContent(record.content).trimEnd();
   return text.length > 0 ? text : undefined;
 }
@@ -745,10 +744,7 @@ export const makePiAdapter = (
           record.message && typeof record.message === "object"
             ? (record.message as Record<string, unknown>)
             : null;
-        if (message?.role === "custom") {
-          completeSuccessfulTurn(threadId, ctx, turnId, raw);
-          return;
-        }
+        void message;
       }
       if (record.type === "extension_ui_request" && record.method === "notify") {
         const message = typeof record.message === "string" ? record.message : "";

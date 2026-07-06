@@ -1171,3 +1171,36 @@ describe("computeStableMessagesTimelineRows", () => {
     expect(reordered.result).toEqual([initial.result[1], initial.result[0]]);
   });
 });
+
+describe("deriveMessagesTimelineRows work log visibility", () => {
+  it("keeps thinking work rows visible instead of filtering them as neutral", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "entry-thinking",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:00Z",
+          entry: {
+            id: "thinking-row",
+            createdAt: "2026-01-01T00:00:00Z",
+            label: "Thinking complete",
+            detail: "Searched for context",
+            tone: "thinking" as const,
+            toolLifecycleStatus: "completed" as const,
+            sourceActivityKind: "task.completed" as const,
+          },
+        },
+      ],
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: "work",
+      groupedEntries: [expect.objectContaining({ id: "thinking-row", tone: "thinking" })],
+    });
+  });
+});

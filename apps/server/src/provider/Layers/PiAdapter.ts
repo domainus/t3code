@@ -525,6 +525,21 @@ export const makePiAdapter = (
           return;
         }
         // Pi notifications are fire-and-forget UI messages, not questions for the user.
+        // Surface non-internal notifications as Work Log trace entries so the run
+        // still explains what Pi is doing without showing a phantom input prompt.
+        if (message.trim().length > 0) {
+          emit({
+            type: "task.progress",
+            ...stamp(threadId, turnId),
+            payload: {
+              taskId: runtimeTaskId(`pi-thinking-${turnId ?? "session"}`),
+              taskType: "notification",
+              description: message,
+              summary: message,
+            },
+            raw: { source: "pi.rpc", payload: raw },
+          } as ProviderRuntimeEvent);
+        }
         return;
       }
       if (record.type === "extension_ui_request" && typeof record.id === "string") {
@@ -556,7 +571,24 @@ export const makePiAdapter = (
           } as ProviderRuntimeEvent);
           return;
         }
-        // Ignore unsupported/fire-and-forget Pi UI methods instead of rendering phantom questions.
+        // Unsupported/fire-and-forget Pi UI methods are trace entries, not questions.
+        emit({
+          type: "task.progress",
+          ...stamp(threadId, turnId),
+          payload: {
+            taskId: runtimeTaskId(`pi-thinking-${turnId ?? "session"}`),
+            taskType: "notification",
+            description:
+              typeof record.message === "string" && record.message.trim().length > 0
+                ? record.message
+                : `Pi UI event: ${method}`,
+            summary:
+              typeof record.message === "string" && record.message.trim().length > 0
+                ? record.message
+                : `Pi UI event: ${method}`,
+          },
+          raw: { source: "pi.rpc", payload: raw },
+        } as ProviderRuntimeEvent);
         return;
       }
       if (!turnId) return;
@@ -578,11 +610,22 @@ export const makePiAdapter = (
         void emitUsageAfterTurn(threadId, ctx, turnId);
         return;
       }
-      if (record.type === "agent_start") {
+      if (record.type === "agent_start" || record.type === "turn_start") {
         emit({
           type: "session.state.changed",
           ...stamp(threadId, turnId),
           payload: { state: "running" },
+          raw: { source: "pi.rpc", payload: raw },
+        } as ProviderRuntimeEvent);
+        emit({
+          type: "task.progress",
+          ...stamp(threadId, turnId),
+          payload: {
+            taskId: runtimeTaskId(`pi-thinking-${turnId}`),
+            taskType: "reasoning",
+            description: "Pi started working",
+            summary: "Pi started working",
+          },
           raw: { source: "pi.rpc", payload: raw },
         } as ProviderRuntimeEvent);
         return;

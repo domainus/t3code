@@ -54,7 +54,11 @@ interface PiSessionContext {
   pendingExtensionRequests: Map<string, { method: string; kind: "request" | "user-input" }>;
   tempFiles: Set<string>;
   capturedUserEntries: PiCapturedEntry[];
-  pendingExtensionResults: Map<string, { resolve: (value: unknown) => void; reject: (cause: Error) => void }>;
+  pendingExtensionResults: Map<
+    string,
+    { resolve: (value: unknown) => void; reject: (cause: Error) => void }
+  >;
+  assistantTextByTurn: Map<TurnId, string>;
 }
 
 interface PiCapturedEntry {
@@ -107,6 +111,28 @@ function textFromEvent(
     };
   }
   return undefined;
+}
+
+function readPiTextContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .flatMap((part): string[] => {
+      if (!part || typeof part !== "object") return [];
+      const record = part as Record<string, unknown>;
+      if (record.type === "text" && typeof record.text === "string") return [record.text];
+      if (record.type === "thinking" && typeof record.thinking === "string") return [record.thinking];
+      return [];
+    })
+    .join("\n\n");
+}
+
+function assistantTextFromPiMessage(message: unknown): string | undefined {
+  if (!message || typeof message !== "object") return undefined;
+  const record = message as Record<string, unknown>;
+  if (record.role !== "assistant") return undefined;
+  const text = readPiTextContent(record.content).trimEnd();
+  return text.length > 0 ? text : undefined;
 }
 
 function toolTitle(event: Record<string, unknown>): string {
@@ -469,12 +495,39 @@ export const makePiAdapter = (
       }
     };
 
+    const reconcileAssistantText = (
+      threadId: ThreadId,
+      ctx: PiSessionContext,
+      turnId: TurnId,
+      message: unknown,
+      raw: unknown,
+    ) => {
+      const finalText = assistantTextFromPiMessage(message);
+      if (!finalText) return;
+      const streamed = ctx.assistantTextByTurn.get(turnId) ?? "";
+      const missing = finalText.startsWith(streamed) ? finalText.slice(streamed.length) : streamed.length === 0 ? finalText : "";
+      if (missing.length === 0) return;
+      ctx.assistantTextByTurn.set(turnId, `${streamed}${missing}`);
+      emit({
+        type: "content.delta",
+        ...stamp(threadId, turnId),
+        payload: { streamKind: "assistant_text", delta: missing },
+        raw: { source: "pi.rpc", payload: raw },
+      } as ProviderRuntimeEvent);
+    };
+
     const handlePiEvent = (threadId: ThreadId, raw: unknown) => {
       const ctx = sessions.get(threadId);
       const turnId = ctx?.activeTurnId;
       if (!ctx) return;
       const text = textFromEvent(raw);
       if (text && turnId) {
+        if (text.kind === "assistant_text") {
+          ctx.assistantTextByTurn.set(
+            turnId,
+            `${ctx.assistantTextByTurn.get(turnId) ?? ""}${text.delta}`,
+          );
+        }
         emit({
           type: "content.delta",
           ...stamp(threadId, turnId),
@@ -502,6 +555,9 @@ export const makePiAdapter = (
       }
       if (!raw || typeof raw !== "object") return;
       const record = raw as Record<string, unknown>;
+      if (record.type === "message_end" && turnId) {
+        reconcileAssistantText(threadId, ctx, turnId, record.message, raw);
+      }
       if (record.type === "extension_ui_request" && record.method === "notify") {
         const message = typeof record.message === "string" ? record.message : "";
         const capture = parseMarkerPayload(message, T3_PI_ENTRY_CAPTURE_MARKER);
@@ -593,6 +649,18 @@ export const makePiAdapter = (
       }
       if (!turnId) return;
       if (record.type === "agent_end" || record.type === "turn_end") {
+        if (Array.isArray(record.messages)) {
+          const finalAssistant = [...record.messages]
+            .reverse()
+            .find((message) =>
+              Boolean(
+                message &&
+                  typeof message === "object" &&
+                  (message as Record<string, unknown>).role === "assistant",
+              ),
+            );
+          reconcileAssistantText(threadId, ctx, turnId, finalAssistant, raw);
+        }
         emit({
           type: "turn.completed",
           ...stamp(threadId, turnId),
@@ -794,6 +862,7 @@ export const makePiAdapter = (
             tempFiles,
             capturedUserEntries: [],
             pendingExtensionResults: new Map(),
+            assistantTextByTurn: new Map(),
           });
           emit({
             type: "session.started",

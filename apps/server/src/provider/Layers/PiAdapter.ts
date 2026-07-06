@@ -319,15 +319,16 @@ async function detectPiMcpAdapter(input: {
   readonly cwd: string;
   readonly environment?: NodeJS.ProcessEnv;
 }): Promise<boolean> {
-  const client = await startPiRpcProcess(input, () => undefined);
+  let client: PiRpcClient | undefined;
   try {
+    client = await startPiRpcProcess(input, () => undefined);
     const data = await client.send({ type: "get_commands" });
     const commands = data && typeof data === "object" ? (data as Record<string, unknown>).commands : undefined;
     return Array.isArray(commands) && commands.some(isPiMcpAdapterCommand);
   } catch {
     return false;
   } finally {
-    await client.stop();
+    await client?.stop();
   }
 }
 
@@ -971,7 +972,10 @@ export const makePiAdapter = (
             });
           }
           const existing = sessions.get(input.threadId);
-          if (existing) await existing.client.stop();
+          if (existing) {
+            await existing.client.stop();
+            await Promise.all([...existing.tempFiles].map((file) => NodeFSP.rm(file, { force: true })));
+          }
           const tempFiles = new Set<string>();
           const args: string[] = ["--append-system-prompt", T3_PI_SYSTEM_PROMPT];
           const sessionFile = resumeSessionFile(input.resumeCursor);

@@ -1,5 +1,5 @@
 import * as NodeAssert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
@@ -344,6 +344,35 @@ it.effect("PiAdapter completes turn from custom message_end text", () =>
     const sessions = yield* adapter.listSessions();
     NodeAssert.equal(sessions[0]?.status, "ready");
     NodeAssert.equal(sessions[0]?.activeTurnId, undefined);
+  }),
+);
+
+it.effect("PiAdapter cleans generated temp files when restarting a session", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() => writeFakePiScript(``));
+    const stateDir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "t3-pi-state-test-")));
+    const adapter = yield* makePiAdapter(
+      { enabled: true, binaryPath: fakePi, customModels: [] },
+      { stateDir },
+    );
+    const threadId = asThreadId("pi-adapter-restart-thread");
+    const input = {
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access" as const,
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    };
+
+    yield* adapter.startSession(input);
+    const extensionDir = join(stateDir, "pi-extension");
+    const firstFiles = yield* Effect.promise(() => readdir(extensionDir));
+    NodeAssert.equal(firstFiles.length, 1);
+
+    yield* adapter.startSession(input);
+    const secondFiles = yield* Effect.promise(() => readdir(extensionDir));
+    NodeAssert.equal(secondFiles.length, 1);
+    NodeAssert.notEqual(secondFiles[0], firstFiles[0]);
   }),
 );
 

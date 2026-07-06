@@ -390,6 +390,36 @@ it.effect("PiAdapter cleans generated temp files when restarting a session", () 
   }),
 );
 
+it.effect("PiAdapter clears pending extension requests when a turn completes", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    write({ type: "extension_ui_request", id: "confirm-1", method: "confirm", message: "Approve?" });
+    write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Done" }] }] });
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
+    const threadId = asThreadId("pi-adapter-clear-request-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    yield* adapter.sendTurn({ threadId, input: "test" });
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
+    NodeAssert.ok(events.some((event) => event.type === "request.opened"));
+    NodeAssert.ok(events.some((event) => event.type === "turn.completed"));
+
+    const staleExit = yield* Effect.exit(
+      adapter.respondToRequest(threadId, ApprovalRequestId.make("confirm-1"), "accept"),
+    );
+    NodeAssert.equal(staleExit._tag, "Failure");
+  }),
+);
+
 it.effect("PiAdapter rejects stale request responses", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() => writeFakePiScript(``));

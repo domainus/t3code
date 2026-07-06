@@ -617,6 +617,11 @@ export const makePiAdapter = (
       } as ProviderRuntimeEvent);
     };
 
+    const clearTerminalTurnState = (ctx: PiSessionContext, turnId: TurnId) => {
+      ctx.pendingExtensionRequests.clear();
+      ctx.assistantTextByTurn.delete(turnId);
+    };
+
     const completeReasoningTask = (
       threadId: ThreadId,
       ctx: PiSessionContext,
@@ -652,6 +657,7 @@ export const makePiAdapter = (
         payload: { state: "completed", stopReason: "stop" },
         raw: { source: "pi.rpc", payload: raw },
       } as ProviderRuntimeEvent);
+      clearTerminalTurnState(ctx, turnId);
       ctx.activeTurnId = undefined;
       const { activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
       void activeTurnId;
@@ -714,6 +720,7 @@ export const makePiAdapter = (
             payload: { state: "failed", stopReason: "process_exit", errorMessage: error },
             raw: { source: "pi.rpc", payload: raw },
           } as ProviderRuntimeEvent);
+          clearTerminalTurnState(ctx, turnId);
           ctx.activeTurnId = undefined;
         }
         const { activeTurnId: _activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
@@ -1204,6 +1211,7 @@ export const makePiAdapter = (
               ...stamp(input.threadId, startedTurnId),
               payload: { state: "failed", stopReason: "prompt_error", errorMessage: detail },
             } as ProviderRuntimeEvent);
+            clearTerminalTurnState(startedCtx, startedTurnId);
             startedCtx.activeTurnId = undefined;
             const { activeTurnId: _activeTurnId, ...sessionWithoutActiveTurn } = startedCtx.session;
             void _activeTurnId;
@@ -1247,6 +1255,7 @@ export const makePiAdapter = (
                 ...stamp(threadId, activeTurnId),
                 payload: { state: "cancelled", stopReason: "abort" },
               } as ProviderRuntimeEvent);
+              clearTerminalTurnState(ctx, activeTurnId);
               ctx.activeTurnId = undefined;
               const { activeTurnId: _activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
               void _activeTurnId;

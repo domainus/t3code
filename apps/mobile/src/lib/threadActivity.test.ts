@@ -175,6 +175,42 @@ describe("buildThreadFeed", () => {
     ]);
   });
 
+  it("keeps thinking task progress visible on mobile", () => {
+    const turnId = TurnId.make("turn-thinking");
+    const thread = makeThread({
+      id: ThreadId.make("thread-thinking"),
+      projectId: ProjectId.make("project-1"),
+      title: "Thinking trace",
+      activities: [
+        makeActivity({
+          id: EventId.make("thinking-progress"),
+          kind: "task.progress",
+          tone: "info",
+          summary: "Reasoning update",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId,
+          payload: {
+            taskId: "pi-thinking-turn-thinking",
+            taskType: "reasoning",
+            summary: "Thinking about the request",
+          },
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread);
+    const group = feed[0];
+    expect(group).toMatchObject({ type: "activity-group" });
+    if (!group || group.type !== "activity-group") return;
+    expect(group.activities[0]).toMatchObject({
+      id: "thinking-progress",
+      summary: "Thinking about the request",
+      icon: "agent",
+      toolLike: true,
+      status: null,
+    });
+  });
+
   it("keeps MCP inputs available to expanded mobile work rows", () => {
     const turnId = TurnId.make("turn-mcp");
     const thread = makeThread({

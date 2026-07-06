@@ -497,6 +497,11 @@ function workEntryStatus(entry: WorkLogEntry): ThreadFeedActivity["status"] {
   if (workEntryIndicatesToolFailure(entry)) {
     return "failure";
   }
+  // Thinking rows are visible trace entries. Treating them as neutral hides them
+  // from the mobile work log filter before the user can inspect the trace.
+  if (entry.tone === "thinking") {
+    return null;
+  }
   if (workEntryIndicatesToolSuccess(entry)) {
     return "success";
   }

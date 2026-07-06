@@ -257,6 +257,11 @@ export function workEntryIndicatesToolNeutralStatus(entry: WorkLogEntry): boolea
   if (workEntryIndicatesToolFailure(entry)) {
     return false;
   }
+  // Thinking rows are first-class trace entries. They may not be a completed
+  // "successful tool" yet, but hiding them as neutral makes the work trace look empty.
+  if (entry.tone === "thinking") {
+    return false;
+  }
   if (workEntryIndicatesToolSuccess(entry)) {
     return false;
   }

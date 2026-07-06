@@ -660,6 +660,7 @@ describe("workEntryIndicatesToolFailure", () => {
       }),
     ).toBe(false);
     expect(workEntryIndicatesToolSuccess({ ...base, tone: "thinking", detail: "…" })).toBe(false);
+    expect(workEntryIndicatesToolNeutralStatus({ ...base, tone: "thinking", detail: "…" })).toBe(false);
     expect(
       workEntryIndicatesToolNeutralStatus({
         ...base,

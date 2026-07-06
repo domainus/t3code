@@ -614,6 +614,7 @@ export const makePiAdapter = (
       ctx: PiSessionContext,
       turnId: TurnId,
       raw: unknown,
+      status: "completed" | "failed" | "stopped" = "completed",
     ) => {
       const summary = ctx.reasoningSummaryByTurn.get(turnId);
       if (!summary) return;
@@ -622,7 +623,7 @@ export const makePiAdapter = (
         ...stamp(threadId, turnId),
         payload: {
           taskId: piThinkingTaskId(turnId),
-          status: "completed",
+          status,
           summary,
         },
         raw: { source: "pi.rpc", payload: raw },
@@ -700,7 +701,7 @@ export const makePiAdapter = (
       if (record.type === "process_exit") {
         const error = typeof record.error === "string" ? record.error : "Pi RPC process exited.";
         if (turnId) {
-          completeReasoningTask(threadId, ctx, turnId, raw);
+          completeReasoningTask(threadId, ctx, turnId, raw, "failed");
           emit({
             type: "turn.completed",
             ...stamp(threadId, turnId),
@@ -1191,7 +1192,7 @@ export const makePiAdapter = (
           }
           const detail = cause instanceof Error ? cause.message : String(cause);
           if (startedCtx && startedTurnId && startedCtx.activeTurnId === startedTurnId) {
-            completeReasoningTask(input.threadId, startedCtx, startedTurnId, { type: "prompt_error", detail });
+            completeReasoningTask(input.threadId, startedCtx, startedTurnId, { type: "prompt_error", detail }, "failed");
             emit({
               type: "turn.completed",
               ...stamp(input.threadId, startedTurnId),
@@ -1229,7 +1230,7 @@ export const makePiAdapter = (
             await ctx.client.send({ type: "abort" });
             const activeTurnId = turnId ?? ctx.activeTurnId;
             if (activeTurnId) {
-              completeReasoningTask(threadId, ctx, activeTurnId, { type: "abort" });
+              completeReasoningTask(threadId, ctx, activeTurnId, { type: "abort" }, "stopped");
               emit({
                 type: "turn.aborted",
                 ...stamp(threadId, activeTurnId),

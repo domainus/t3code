@@ -141,7 +141,7 @@ it.effect("PiAdapter completes active reasoning trace when interrupted", () =>
     const turn = yield* adapter.sendTurn({ threadId, input: "test" });
     yield* adapter.interruptTurn(threadId, turn.turnId);
     const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
-    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "stopped"));
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "cancelled"));
     const sessions = yield* adapter.listSessions();
     NodeAssert.equal(sessions[0]?.status, "ready");
@@ -167,7 +167,7 @@ it.effect("PiAdapter fails and clears active turn when the Pi process exits mid-
     });
     yield* Effect.exit(adapter.sendTurn({ threadId, input: "test" }));
     const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
-    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "failed"));
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "failed"));
     const sessions = yield* adapter.listSessions();
     NodeAssert.equal(sessions[0]?.status, "error");
@@ -427,7 +427,7 @@ it.effect("PiAdapter fails and clears active turn when prompt RPC fails", () =>
     const exit = yield* Effect.exit(adapter.sendTurn({ threadId, input: "test" }));
     NodeAssert.equal(exit._tag, "Failure");
     const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
-    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "failed"));
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "failed"));
     const sessions = yield* adapter.listSessions();
     NodeAssert.equal(sessions[0]?.status, "error");

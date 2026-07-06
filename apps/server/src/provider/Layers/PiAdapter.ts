@@ -487,8 +487,9 @@ export const makePiAdapter = (
       }
       if (!raw || typeof raw !== "object") return;
       const record = raw as Record<string, unknown>;
-      if (record.type === "extension_ui_request" && record.method === "notify" && typeof record.message === "string") {
-        const capture = parseMarkerPayload(record.message, T3_PI_ENTRY_CAPTURE_MARKER);
+      if (record.type === "extension_ui_request" && record.method === "notify") {
+        const message = typeof record.message === "string" ? record.message : "";
+        const capture = parseMarkerPayload(message, T3_PI_ENTRY_CAPTURE_MARKER);
         if (capture) {
           ctx.capturedUserEntries = parseCapturedEntries(capture.entries);
           const requestId = typeof capture.requestId === "string" ? capture.requestId : undefined;
@@ -498,7 +499,7 @@ export const makePiAdapter = (
           }
           return;
         }
-        const result = parseMarkerPayload(record.message, T3_PI_COMMAND_RESULT_MARKER);
+        const result = parseMarkerPayload(message, T3_PI_COMMAND_RESULT_MARKER);
         if (result && typeof result.requestId === "string") {
           const pending = ctx.pendingExtensionResults.get(result.requestId);
           if (pending) {
@@ -508,6 +509,8 @@ export const makePiAdapter = (
           }
           return;
         }
+        // Pi notifications are fire-and-forget UI messages, not questions for the user.
+        return;
       }
       if (record.type === "extension_ui_request" && typeof record.id === "string") {
         const method = typeof record.method === "string" ? record.method : "unknown";

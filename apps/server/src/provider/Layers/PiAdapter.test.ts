@@ -188,17 +188,16 @@ it.effect("PiAdapter reconciles final text containing already-streamed text with
   }),
 );
 
-it.effect("PiAdapter reconciles custom message_end text as assistant output", () =>
+it.effect("PiAdapter completes turn from custom message_end text", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>
       writeFakePiScript(`
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Partial" } });
     write({ type: "message_end", message: { role: "custom", content: [{ type: "text", text: "Partial final answer" }] } });
-    write({ type: "agent_end", messages: [] });
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 8)).pipe(Effect.forkChild);
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 10)).pipe(Effect.forkChild);
     const threadId = asThreadId("pi-adapter-custom-message-thread");
     yield* adapter.startSession({
       threadId,
@@ -213,6 +212,10 @@ it.effect("PiAdapter reconciles custom message_end text as assistant output", ()
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
     NodeAssert.deepEqual(assistantDeltas, ["Partial", " final answer"]);
+    NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "completed"));
+    const sessions = yield* adapter.listSessions();
+    NodeAssert.equal(sessions[0]?.status, "ready");
+    NodeAssert.equal(sessions[0]?.activeTurnId, undefined);
   }),
 );
 

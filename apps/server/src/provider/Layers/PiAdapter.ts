@@ -619,6 +619,30 @@ export const makePiAdapter = (
       ctx.reasoningSummaryByTurn.delete(turnId);
     };
 
+    const completeSuccessfulTurn = (
+      threadId: ThreadId,
+      ctx: PiSessionContext,
+      turnId: TurnId,
+      raw: unknown,
+    ) => {
+      completeReasoningTask(threadId, ctx, turnId, raw);
+      emit({
+        type: "turn.completed",
+        ...stamp(threadId, turnId),
+        payload: { state: "completed", stopReason: "stop" },
+        raw: { source: "pi.rpc", payload: raw },
+      } as ProviderRuntimeEvent);
+      ctx.activeTurnId = undefined;
+      const { activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
+      void activeTurnId;
+      ctx.session = {
+        ...sessionWithoutActiveTurn,
+        status: "ready",
+        updatedAt: new Date().toISOString(),
+      };
+      void emitUsageAfterTurn(threadId, ctx, turnId);
+    };
+
     const handlePiEvent = (threadId: ThreadId, raw: unknown) => {
       const ctx = sessions.get(threadId);
       const turnId = ctx?.activeTurnId;
@@ -692,6 +716,14 @@ export const makePiAdapter = (
       }
       if (record.type === "message_end" && turnId) {
         reconcileAssistantText(threadId, ctx, turnId, record.message, raw);
+        const message =
+          record.message && typeof record.message === "object"
+            ? (record.message as Record<string, unknown>)
+            : null;
+        if (message?.role === "custom") {
+          completeSuccessfulTurn(threadId, ctx, turnId, raw);
+          return;
+        }
       }
       if (record.type === "extension_ui_request" && record.method === "notify") {
         const message = typeof record.message === "string" ? record.message : "";
@@ -796,22 +828,7 @@ export const makePiAdapter = (
             );
           reconcileAssistantText(threadId, ctx, turnId, finalAssistant, raw);
         }
-        completeReasoningTask(threadId, ctx, turnId, raw);
-        emit({
-          type: "turn.completed",
-          ...stamp(threadId, turnId),
-          payload: { state: "completed", stopReason: "stop" },
-          raw: { source: "pi.rpc", payload: raw },
-        } as ProviderRuntimeEvent);
-        ctx.activeTurnId = undefined;
-        const { activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
-        void activeTurnId;
-        ctx.session = {
-          ...sessionWithoutActiveTurn,
-          status: "ready",
-          updatedAt: new Date().toISOString(),
-        };
-        void emitUsageAfterTurn(threadId, ctx, turnId);
+        completeSuccessfulTurn(threadId, ctx, turnId, raw);
         return;
       }
       if (record.type === "agent_start" || record.type === "turn_start") {

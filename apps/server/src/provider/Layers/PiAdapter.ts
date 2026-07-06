@@ -121,7 +121,6 @@ function readPiTextContent(content: unknown): string {
       if (!part || typeof part !== "object") return [];
       const record = part as Record<string, unknown>;
       if (record.type === "text" && typeof record.text === "string") return [record.text];
-      if (record.type === "thinking" && typeof record.thinking === "string") return [record.thinking];
       return [];
     })
     .join("\n\n");

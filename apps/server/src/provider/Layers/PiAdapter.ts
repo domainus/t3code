@@ -60,6 +60,7 @@ interface PiSessionContext {
   >;
   assistantTextByTurn: Map<TurnId, string>;
   reasoningSummaryByTurn: Map<TurnId, string>;
+  notificationSequence: number;
 }
 
 interface PiCapturedEntry {
@@ -136,8 +137,11 @@ function piThinkingTaskId(turnId: TurnId | string): RuntimeTaskId {
   return runtimeTaskId(`pi-thinking-${turnId}`);
 }
 
-function piNotificationTaskId(turnId: TurnId | string | undefined): RuntimeTaskId {
-  return runtimeTaskId(`pi-notification-${turnId ?? "session"}`);
+function piNotificationTaskId(
+  turnId: TurnId | string | undefined,
+  sequence: number,
+): RuntimeTaskId {
+  return runtimeTaskId(`pi-notification-${turnId ?? "session"}-${sequence}`);
 }
 
 function assistantTextFromPiMessage(message: unknown): string | undefined {
@@ -764,7 +768,7 @@ export const makePiAdapter = (
             type: "task.progress",
             ...stamp(threadId, turnId),
             payload: {
-              taskId: piNotificationTaskId(turnId),
+              taskId: piNotificationTaskId(turnId, ++ctx.notificationSequence),
               taskType: "notification",
               description: message,
               summary: message,
@@ -808,7 +812,7 @@ export const makePiAdapter = (
           type: "task.progress",
           ...stamp(threadId, turnId),
           payload: {
-            taskId: piNotificationTaskId(turnId),
+            taskId: piNotificationTaskId(turnId, ++ctx.notificationSequence),
             taskType: "notification",
             description:
               typeof record.message === "string" && record.message.trim().length > 0
@@ -1038,6 +1042,7 @@ export const makePiAdapter = (
             pendingExtensionResults: new Map(),
             assistantTextByTurn: new Map(),
             reasoningSummaryByTurn: new Map(),
+            notificationSequence: 0,
           });
           emit({
             type: "session.started",

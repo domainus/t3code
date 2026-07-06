@@ -311,7 +311,7 @@ function isPiMcpAdapterCommand(command: unknown): boolean {
   if (record.source !== "extension" || typeof record.name !== "string" || !/^mcp(?::\d+)?$/.test(record.name)) {
     return false;
   }
-  return record.sourceInfo === undefined || JSON.stringify(record.sourceInfo).includes("pi-mcp-adapter");
+  return record.sourceInfo !== undefined && JSON.stringify(record.sourceInfo).includes("pi-mcp-adapter");
 }
 
 async function detectPiMcpAdapter(input: {

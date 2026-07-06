@@ -555,6 +555,11 @@ export const makePiAdapter = (
     const appendMissingAssistantText = (streamed: string, finalText: string): string => {
       if (finalText.startsWith(streamed)) return finalText.slice(streamed.length);
       if (streamed.length === 0) return finalText;
+      if (streamed.includes(finalText)) return "";
+      const streamedOffsetInFinal = finalText.indexOf(streamed);
+      if (streamedOffsetInFinal >= 0) {
+        return finalText.slice(streamedOffsetInFinal + streamed.length);
+      }
       const maxOverlap = Math.min(streamed.length, finalText.length);
       for (let size = maxOverlap; size > 0; size -= 1) {
         if (streamed.slice(-size) === finalText.slice(0, size)) {
@@ -562,7 +567,8 @@ export const makePiAdapter = (
         }
       }
       // If Pi's final transcript is not an extension of the streamed text, prefer
-      // surfacing the canonical final answer over silently dropping it.
+      // surfacing the canonical final answer over silently dropping it. Prefix with
+      // a separator so the mismatch is readable rather than welded to a partial word.
       return `\n\n${finalText}`;
     };
 

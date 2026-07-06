@@ -160,3 +160,30 @@ it.effect("PiAdapter fails and clears active turn when the Pi process exits mid-
     NodeAssert.equal(sessions[0]?.activeTurnId, undefined);
   }),
 );
+
+it.effect("PiAdapter reconciles final text containing already-streamed text without duplicating the answer", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "world" } });
+    write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Hello world!" }] }] });
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-overlap-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    yield* adapter.sendTurn({ threadId, input: "test" });
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const assistantDeltas = events
+      .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
+      .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
+    NodeAssert.deepEqual(assistantDeltas, ["world", "!"]);
+  }),
+);

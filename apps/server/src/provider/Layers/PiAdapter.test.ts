@@ -106,3 +106,30 @@ it.effect("PiAdapter does not turn noninteractive UI notifications into user inp
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Pi toast")));
   }),
 );
+
+it.effect("PiAdapter completes active reasoning trace when interrupted", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    response(msg.id, msg.type, {});
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-interrupt-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    const turn = yield* adapter.sendTurn({ threadId, input: "test" });
+    yield* adapter.interruptTurn(threadId, turn.turnId);
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "cancelled"));
+    const sessions = yield* adapter.listSessions();
+    NodeAssert.equal(sessions[0]?.status, "ready");
+  }),
+);

@@ -633,7 +633,8 @@ export const makePiAdapter = (
         } as ProviderRuntimeEvent);
         if (text.kind === "reasoning_text" && text.delta.trim().length > 0) {
           const previous = ctx.reasoningSummaryByTurn.get(turnId) ?? "";
-          const nextSummary = `${previous}${text.delta}`.trim();
+          const nextSummary =
+            previous === "Pi started working" ? text.delta.trim() : `${previous}${text.delta}`.trim();
           ctx.reasoningSummaryByTurn.set(turnId, nextSummary);
           emit({
             type: "task.progress",
@@ -782,14 +783,16 @@ export const makePiAdapter = (
           payload: { state: "running" },
           raw: { source: "pi.rpc", payload: raw },
         } as ProviderRuntimeEvent);
+        const startSummary = "Pi started working";
+        ctx.reasoningSummaryByTurn.set(turnId, ctx.reasoningSummaryByTurn.get(turnId) ?? startSummary);
         emit({
           type: "task.progress",
           ...stamp(threadId, turnId),
           payload: {
             taskId: piThinkingTaskId(turnId),
             taskType: "reasoning",
-            description: "Pi started working",
-            summary: "Pi started working",
+            description: startSummary,
+            summary: startSummary,
           },
           raw: { source: "pi.rpc", payload: raw },
         } as ProviderRuntimeEvent);
@@ -1113,11 +1116,25 @@ export const makePiAdapter = (
             await ctx.client.send({ type: "abort" });
             const activeTurnId = turnId ?? ctx.activeTurnId;
             if (activeTurnId) {
+              completeReasoningTask(threadId, ctx, activeTurnId, { type: "abort" });
               emit({
                 type: "turn.aborted",
                 ...stamp(threadId, activeTurnId),
                 payload: { reason: "Interrupted by user" },
               } as ProviderRuntimeEvent);
+              emit({
+                type: "turn.completed",
+                ...stamp(threadId, activeTurnId),
+                payload: { state: "cancelled", stopReason: "abort" },
+              } as ProviderRuntimeEvent);
+              ctx.activeTurnId = undefined;
+              const { activeTurnId: _activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
+              void _activeTurnId;
+              ctx.session = {
+                ...sessionWithoutActiveTurn,
+                status: "ready",
+                updatedAt: new Date().toISOString(),
+              };
             }
           },
           catch: (cause) =>

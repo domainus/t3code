@@ -134,7 +134,11 @@ function piThinkingTaskId(turnId: TurnId | string): RuntimeTaskId {
 function assistantTextFromPiMessage(message: unknown): string | undefined {
   if (!message || typeof message !== "object") return undefined;
   const record = message as Record<string, unknown>;
-  if (record.role !== "assistant") return undefined;
+  // Pi can emit assistant-visible text as either an assistant message or a
+  // custom message. Paseo renders custom message_end text as assistant output;
+  // doing the same here prevents the response bubble from staying truncated
+  // when Pi finalizes generated text through that channel.
+  if (record.role !== "assistant" && record.role !== "custom") return undefined;
   const text = readPiTextContent(record.content).trimEnd();
   return text.length > 0 ? text : undefined;
 }

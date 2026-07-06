@@ -652,6 +652,34 @@ export const makePiAdapter = (
       }
       if (!raw || typeof raw !== "object") return;
       const record = raw as Record<string, unknown>;
+      if (record.type === "process_exit") {
+        const error = typeof record.error === "string" ? record.error : "Pi RPC process exited.";
+        if (turnId) {
+          completeReasoningTask(threadId, ctx, turnId, raw);
+          emit({
+            type: "turn.completed",
+            ...stamp(threadId, turnId),
+            payload: { state: "failed", stopReason: "process_exit", errorMessage: error },
+            raw: { source: "pi.rpc", payload: raw },
+          } as ProviderRuntimeEvent);
+          ctx.activeTurnId = undefined;
+        }
+        const { activeTurnId: _activeTurnId, ...sessionWithoutActiveTurn } = ctx.session;
+        void _activeTurnId;
+        ctx.session = {
+          ...sessionWithoutActiveTurn,
+          status: "error",
+          lastError: error,
+          updatedAt: new Date().toISOString(),
+        };
+        emit({
+          type: "session.exited",
+          ...stamp(threadId, turnId),
+          payload: { exitKind: "error", reason: error, recoverable: true },
+          raw: { source: "pi.rpc", payload: raw },
+        } as ProviderRuntimeEvent);
+        return;
+      }
       if (record.type === "message_end" && turnId) {
         reconcileAssistantText(threadId, ctx, turnId, record.message, raw);
       }
@@ -784,18 +812,20 @@ export const makePiAdapter = (
           raw: { source: "pi.rpc", payload: raw },
         } as ProviderRuntimeEvent);
         const startSummary = "Pi started working";
-        ctx.reasoningSummaryByTurn.set(turnId, ctx.reasoningSummaryByTurn.get(turnId) ?? startSummary);
-        emit({
-          type: "task.progress",
-          ...stamp(threadId, turnId),
-          payload: {
-            taskId: piThinkingTaskId(turnId),
-            taskType: "reasoning",
-            description: startSummary,
-            summary: startSummary,
-          },
-          raw: { source: "pi.rpc", payload: raw },
-        } as ProviderRuntimeEvent);
+        if (!ctx.reasoningSummaryByTurn.has(turnId)) {
+          ctx.reasoningSummaryByTurn.set(turnId, startSummary);
+          emit({
+            type: "task.progress",
+            ...stamp(threadId, turnId),
+            payload: {
+              taskId: piThinkingTaskId(turnId),
+              taskType: "reasoning",
+              description: startSummary,
+              summary: startSummary,
+            },
+            raw: { source: "pi.rpc", payload: raw },
+          } as ProviderRuntimeEvent);
+        }
         return;
       }
       if (record.type === "compaction_start") {
@@ -1080,6 +1110,18 @@ export const makePiAdapter = (
             type: "turn.started",
             ...stamp(input.threadId, turnId),
             payload: input.modelSelection?.model ? { model: input.modelSelection.model } : {},
+          } as ProviderRuntimeEvent);
+          const startSummary = "Pi started working";
+          ctx.reasoningSummaryByTurn.set(turnId, startSummary);
+          emit({
+            type: "task.progress",
+            ...stamp(input.threadId, turnId),
+            payload: {
+              taskId: piThinkingTaskId(turnId),
+              taskType: "reasoning",
+              description: startSummary,
+              summary: startSummary,
+            },
           } as ProviderRuntimeEvent);
           await ctx.client.send({
             type: "prompt",

@@ -133,3 +133,30 @@ it.effect("PiAdapter completes active reasoning trace when interrupted", () =>
     NodeAssert.equal(sessions[0]?.status, "ready");
   }),
 );
+
+it.effect("PiAdapter fails and clears active turn when the Pi process exits mid-turn", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    process.exit(2);
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 8)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-exit-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    yield* Effect.exit(adapter.sendTurn({ threadId, input: "test" }));
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "failed"));
+    const sessions = yield* adapter.listSessions();
+    NodeAssert.equal(sessions[0]?.status, "error");
+    NodeAssert.equal(sessions[0]?.activeTurnId, undefined);
+  }),
+);

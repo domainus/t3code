@@ -84,9 +84,9 @@ export function startPiRpcProcess(
       failAll(error);
     });
     child.once("exit", (code, signal) => {
-      const error = new Error(
-        `Pi RPC process exited (code=${code} signal=${signal}). ${stderr}`.trim(),
-      );
+      const message = `Pi RPC process exited (code=${code} signal=${signal}). ${stderr}`.trim();
+      const error = new Error(message);
+      onEvent({ type: "process_exit", error: message, code, signal });
       if (!settled) {
         settled = true;
         reject(error);

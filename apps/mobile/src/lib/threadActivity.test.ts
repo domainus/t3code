@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  ApprovalRequestId,
   EventId,
   MessageId,
   ProjectId,
@@ -13,6 +14,7 @@ import {
 
 import {
   buildThreadFeed,
+  derivePendingUserInputs,
   deriveThreadFeedPresentation,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
@@ -52,6 +54,42 @@ function makeThread(
     ...input,
   };
 }
+
+describe("derivePendingUserInputs", () => {
+  it("clears stale Codex user input failures on mobile", () => {
+    const requestId = ApprovalRequestId.make("stale-input");
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: EventId.make("input-requested"),
+        kind: "user-input.requested",
+        summary: "User input requested",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        payload: {
+          requestId,
+          questions: [
+            {
+              id: "answer",
+              type: "input",
+              label: "Answer",
+            },
+          ],
+        },
+      }),
+      makeActivity({
+        id: EventId.make("input-failed"),
+        kind: "provider.user-input.respond.failed",
+        summary: "User input failed",
+        createdAt: "2026-04-01T00:00:01.000Z",
+        payload: {
+          requestId,
+          detail: "Unknown pending Codex user input request: stale-input",
+        },
+      }),
+    ];
+
+    expect(derivePendingUserInputs(activities)).toEqual([]);
+  });
+});
 
 describe("buildThreadFeed", () => {
   it("keeps historic work entries attributed to their turns", () => {

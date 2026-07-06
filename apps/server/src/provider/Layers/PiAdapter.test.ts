@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 
-import { ProviderDriverKind, ProviderInstanceId, ProviderRuntimeEvent, ThreadId } from "@t3tools/contracts";
+import { ApprovalRequestId, ProviderDriverKind, ProviderInstanceId, ProviderRuntimeEvent, ThreadId } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { makePiAdapter } from "./PiAdapter.ts";
 
@@ -379,6 +379,31 @@ it.effect("PiAdapter cleans generated temp files when restarting a session", () 
     const secondFiles = yield* Effect.promise(() => readdir(extensionDir));
     NodeAssert.equal(secondFiles.length, 1);
     NodeAssert.notEqual(secondFiles[0], firstFiles[0]);
+  }),
+);
+
+it.effect("PiAdapter rejects stale request responses", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() => writeFakePiScript(``));
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const threadId = asThreadId("pi-adapter-stale-request-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+
+    const approvalExit = yield* Effect.exit(
+      adapter.respondToRequest(threadId, ApprovalRequestId.make("missing-approval"), "accept"),
+    );
+    NodeAssert.equal(approvalExit._tag, "Failure");
+
+    const inputExit = yield* Effect.exit(
+      adapter.respondToUserInput(threadId, ApprovalRequestId.make("missing-input"), { value: "ok" }),
+    );
+    NodeAssert.equal(inputExit._tag, "Failure");
   }),
 );
 

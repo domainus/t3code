@@ -1265,6 +1265,14 @@ export const makePiAdapter = (
           try: async () => {
             const ctx = requireSession(threadId);
             const id = String(requestId);
+            const pending = ctx.pendingExtensionRequests.get(id);
+            if (pending?.kind !== "request") {
+              throw new ProviderAdapterValidationError({
+                provider: PROVIDER,
+                operation: "respondToRequest",
+                issue: `Unknown pending Pi request '${id}'.`,
+              });
+            }
             ctx.client.notify({
               type: "extension_ui_response",
               id,
@@ -1280,7 +1288,8 @@ export const makePiAdapter = (
             } as ProviderRuntimeEvent);
           },
           catch: (cause) =>
-            cause instanceof ProviderAdapterSessionNotFoundError
+            cause instanceof ProviderAdapterSessionNotFoundError ||
+            cause instanceof ProviderAdapterValidationError
               ? cause
               : new ProviderAdapterRequestError({
                   provider: PROVIDER,
@@ -1294,6 +1303,14 @@ export const makePiAdapter = (
           try: async () => {
             const ctx = requireSession(threadId);
             const id = String(requestId);
+            const pending = ctx.pendingExtensionRequests.get(id);
+            if (pending?.kind !== "user-input") {
+              throw new ProviderAdapterValidationError({
+                provider: PROVIDER,
+                operation: "respondToUserInput",
+                issue: `Unknown pending Pi user-input request '${id}'.`,
+              });
+            }
             const value = answers.value;
             const responseValue = Array.isArray(value)
               ? value.join(", ")
@@ -1310,7 +1327,8 @@ export const makePiAdapter = (
             } as ProviderRuntimeEvent);
           },
           catch: (cause) =>
-            cause instanceof ProviderAdapterSessionNotFoundError
+            cause instanceof ProviderAdapterSessionNotFoundError ||
+            cause instanceof ProviderAdapterValidationError
               ? cause
               : new ProviderAdapterRequestError({
                   provider: PROVIDER,

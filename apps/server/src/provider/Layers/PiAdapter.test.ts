@@ -48,6 +48,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
     const fakePi = yield* Effect.promise(() =>
       writeFakePiScript(`
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "thinking_delta", delta: "Thinking about it" } });
+    write({ type: "extension_ui_request", method: "notify", message: "Checked cache" });
     write({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "web_search", args: { query: "x" } });
     write({ type: "tool_execution_end", toolCallId: "tool-1", toolName: "web_search", result: { summary: "Found results" } });
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Hello" } });
@@ -56,7 +57,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 14)).pipe(Effect.forkChild);
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 15)).pipe(Effect.forkChild);
     const threadId = asThreadId("pi-adapter-test-thread");
     yield* adapter.startSession({
       threadId,
@@ -72,6 +73,14 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
     NodeAssert.deepEqual(assistantDeltas, ["Hello", " world"]);
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Thinking")));
+    NodeAssert.ok(
+      events.some(
+        (event) =>
+          event.type === "task.progress" &&
+          event.payload.taskType === "notification" &&
+          String(event.payload.taskId).startsWith("pi-notification-"),
+      ),
+    );
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.lastToolName) === "Web search"));
     NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
     NodeAssert.ok(events.some((event) => event.type === "item.started" && event.payload.title === "Web search"));

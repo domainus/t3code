@@ -136,6 +136,10 @@ function piThinkingTaskId(turnId: TurnId | string): RuntimeTaskId {
   return runtimeTaskId(`pi-thinking-${turnId}`);
 }
 
+function piNotificationTaskId(turnId: TurnId | string | undefined): RuntimeTaskId {
+  return runtimeTaskId(`pi-notification-${turnId ?? "session"}`);
+}
+
 function assistantTextFromPiMessage(message: unknown): string | undefined {
   if (!message || typeof message !== "object") return undefined;
   const record = message as Record<string, unknown>;
@@ -760,7 +764,7 @@ export const makePiAdapter = (
             type: "task.progress",
             ...stamp(threadId, turnId),
             payload: {
-              taskId: runtimeTaskId(`pi-thinking-${turnId ?? "session"}`),
+              taskId: piNotificationTaskId(turnId),
               taskType: "notification",
               description: message,
               summary: message,
@@ -804,7 +808,7 @@ export const makePiAdapter = (
           type: "task.progress",
           ...stamp(threadId, turnId),
           payload: {
-            taskId: runtimeTaskId(`pi-thinking-${turnId ?? "session"}`),
+            taskId: piNotificationTaskId(turnId),
             taskType: "notification",
             description:
               typeof record.message === "string" && record.message.trim().length > 0

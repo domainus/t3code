@@ -543,7 +543,9 @@ export const makePiAdapter = (
             },
             raw: { source: "pi.rpc", payload: raw },
           } as ProviderRuntimeEvent);
-        } else {
+          return;
+        }
+        if (method === "select" || method === "input" || method === "editor") {
           ctx.pendingExtensionRequests.set(record.id, { method, kind: "user-input" });
           emit({
             type: "user-input.requested",
@@ -552,7 +554,9 @@ export const makePiAdapter = (
             payload: userInputPayloadForExtensionRequest(record),
             raw: { source: "pi.rpc", payload: raw },
           } as ProviderRuntimeEvent);
+          return;
         }
+        // Ignore unsupported/fire-and-forget Pi UI methods instead of rendering phantom questions.
         return;
       }
       if (!turnId) return;

@@ -244,7 +244,7 @@ describe("buildThreadFeed", () => {
       id: "thinking-progress",
       summary: "Thinking about the request",
       icon: "agent",
-      toolLike: true,
+      toolLike: false,
       status: null,
     });
   });
@@ -343,7 +343,7 @@ describe("buildThreadFeed", () => {
       id: "thinking-completed",
       summary: "Thinking",
       icon: "agent",
-      toolLike: true,
+      toolLike: false,
       status: null,
     });
   });

@@ -18,6 +18,7 @@ import {
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   isLatestTurnSettled,
+  workLogEntryIsToolLike,
   workEntryIndicatesToolFailure,
   workEntryIndicatesToolNeutralStatus,
   workEntryIndicatesToolSuccess,
@@ -667,6 +668,7 @@ describe("workEntryIndicatesToolFailure", () => {
         detail: "…",
       }),
     ).toBe(false);
+    expect(workLogEntryIsToolLike({ ...base, tone: "thinking", detail: "…" })).toBe(false);
     expect(workEntryIndicatesToolSuccess({ ...base, tone: "thinking", detail: "…" })).toBe(false);
     expect(workEntryIndicatesToolNeutralStatus({ ...base, tone: "thinking", detail: "…" })).toBe(false);
     expect(

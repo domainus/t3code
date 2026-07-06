@@ -792,6 +792,12 @@ export const makePiAdapter = (
       }
       if (record.type === "extension_ui_request" && typeof record.id === "string") {
         const method = typeof record.method === "string" ? record.method : "unknown";
+        if (method === "setStatus") {
+          // Pi status updates are transient UI chrome. T3 already tracks turn
+          // state separately, so rendering these as Work Log entries creates
+          // noisy "Pi UI event: setStatus" rows after otherwise clean turns.
+          return;
+        }
         const requestId = runtimeRequestId(record.id);
         if (method === "confirm") {
           ctx.pendingExtensionRequests.set(record.id, { method, kind: "request" });

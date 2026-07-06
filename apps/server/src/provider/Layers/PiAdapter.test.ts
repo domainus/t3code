@@ -106,6 +106,7 @@ it.effect("PiAdapter does not turn noninteractive UI notifications into user inp
     const fakePi = yield* Effect.promise(() =>
       writeFakePiScript(`
     write({ type: "extension_ui_request", id: "notify-1", method: "notify", message: "Pi note" });
+    write({ type: "extension_ui_request", id: "status-1", method: "setStatus", message: "Working" });
     write({ type: "extension_ui_request", id: "unknown-1", method: "toast", message: "Pi toast" });
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Done" } });
     write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Done" }] }] });
@@ -126,6 +127,10 @@ it.effect("PiAdapter does not turn noninteractive UI notifications into user inp
     NodeAssert.equal(events.some((event) => event.type === "user-input.requested"), false);
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Pi note")));
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Pi toast")));
+    NodeAssert.equal(
+      events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("setStatus")),
+      false,
+    );
   }),
 );
 

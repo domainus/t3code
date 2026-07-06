@@ -232,7 +232,7 @@ it.effect("PiAdapter surfaces canonical final text when it revises a streamed dr
   }),
 );
 
-it.effect("PiAdapter reconciles final text containing already-streamed text without duplicating the answer", () =>
+it.effect("PiAdapter surfaces canonical final text when streamed text is a suffix", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>
       writeFakePiScript(`
@@ -255,7 +255,7 @@ it.effect("PiAdapter reconciles final text containing already-streamed text with
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
-    NodeAssert.deepEqual(assistantDeltas, ["world", "!"]);
+    NodeAssert.deepEqual(assistantDeltas, ["world", "\n\nHello world!"]);
   }),
 );
 

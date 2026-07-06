@@ -572,10 +572,6 @@ export const makePiAdapter = (
     const appendMissingAssistantText = (streamed: string, finalText: string): string => {
       if (finalText.startsWith(streamed)) return finalText.slice(streamed.length);
       if (streamed.length === 0) return finalText;
-      const streamedOffsetInFinal = finalText.indexOf(streamed);
-      if (streamedOffsetInFinal >= 0) {
-        return finalText.slice(streamedOffsetInFinal + streamed.length);
-      }
       const maxOverlap = Math.min(streamed.length, finalText.length);
       for (let size = maxOverlap; size > 0; size -= 1) {
         if (streamed.slice(-size) === finalText.slice(0, size)) {

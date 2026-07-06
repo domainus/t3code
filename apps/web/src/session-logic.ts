@@ -704,6 +704,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       : null
     : extractToolDetail(payload, title ?? activity.summary);
   const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
+  const taskType = asTrimmedString(payload?.taskType);
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
@@ -711,7 +712,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     label: taskLabel || activity.summary,
     tone:
       activity.kind === "task.progress"
-        ? "thinking"
+        ? taskType === "notification"
+          ? "info"
+          : "thinking"
         : activity.tone === "approval"
           ? "info"
           : activity.tone,

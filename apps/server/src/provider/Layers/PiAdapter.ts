@@ -7,6 +7,7 @@ import {
   type ProviderSession,
   RuntimeItemId,
   RuntimeRequestId,
+  RuntimeTaskId,
   type ThreadId,
   TurnId,
   type PiSettings,
@@ -33,6 +34,7 @@ const PROVIDER = ProviderDriverKind.make("pi");
 const eventId = () => EventId.make(NodeCrypto.randomUUID());
 const runtimeItemId = (id: string) => RuntimeItemId.make(id);
 const runtimeRequestId = (id: string) => RuntimeRequestId.make(id);
+const runtimeTaskId = (id: string) => RuntimeTaskId.make(id);
 const T3_PI_SYSTEM_PROMPT =
   "You are running inside T3 Code. Surface interactive extension UI requests through the host UI when available.";
 const T3_PI_ENTRY_CAPTURE_MARKER = "T3_PI_ENTRY_CAPTURE";
@@ -483,6 +485,19 @@ export const makePiAdapter = (
           },
           raw: { source: "pi.rpc", payload: raw },
         } as ProviderRuntimeEvent);
+        if (text.kind === "reasoning_text" && text.delta.trim().length > 0) {
+          emit({
+            type: "task.progress",
+            ...stamp(threadId, turnId),
+            payload: {
+              taskId: runtimeTaskId(`pi-thinking-${turnId}`),
+              taskType: "reasoning",
+              description: text.delta,
+              summary: text.delta,
+            },
+            raw: { source: "pi.rpc", payload: raw },
+          } as ProviderRuntimeEvent);
+        }
         return;
       }
       if (!raw || typeof raw !== "object") return;
@@ -613,6 +628,18 @@ export const makePiAdapter = (
           raw: { source: "pi.rpc", payload: raw },
         };
         if (record.type === "tool_execution_start") {
+          emit({
+            type: "task.progress",
+            ...stamp(threadId, turnId),
+            payload: {
+              taskId: runtimeTaskId(`pi-thinking-${turnId}`),
+              taskType: "reasoning",
+              description: `Using ${toolName}`,
+              summary: `Using ${toolName}`,
+              lastToolName: toolName,
+            },
+            raw: { source: "pi.rpc", payload: raw },
+          } as ProviderRuntimeEvent);
           emit({
             type: "item.started",
             ...base,

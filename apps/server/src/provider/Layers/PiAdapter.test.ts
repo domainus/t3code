@@ -71,7 +71,8 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
     NodeAssert.deepEqual(assistantDeltas, ["Hello", " world"]);
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Thinking")));
-    NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.lastToolName) === "web_search"));
+    NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.lastToolName) === "Web search"));
+    NodeAssert.ok(events.some((event) => event.type === "item.started" && event.payload.title === "Web search"));
   }),
 );
 

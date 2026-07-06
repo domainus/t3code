@@ -134,8 +134,43 @@ function assistantTextFromPiMessage(message: unknown): string | undefined {
   return text.length > 0 ? text : undefined;
 }
 
+function humanizeToolName(name: string): string {
+  return name
+    .replace(/^functions[._-]/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
+
 function toolTitle(event: Record<string, unknown>): string {
-  return typeof event.toolName === "string" ? event.toolName : "Tool";
+  const rawName = typeof event.toolName === "string" ? event.toolName : "Tool";
+  return humanizeToolName(rawName);
+}
+
+function toolDetailFromArgs(toolName: string, args: unknown): string | undefined {
+  if (typeof args === "string") return args.trim() || undefined;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const record = args as Record<string, unknown>;
+  const lowerName = toolName.toLowerCase();
+  const candidates = lowerName.includes("web")
+    ? [record.query, record.q, record.prompt, record.url]
+    : lowerName.includes("bash") || lowerName.includes("command")
+      ? [record.command, record.cmd]
+      : lowerName.includes("read") || lowerName.includes("edit") || lowerName.includes("write")
+        ? [record.path, record.file, record.filePath]
+        : [record.query, record.command, record.path, record.url, record.prompt];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) return candidate.trim();
+  }
+  const keys = Object.keys(record);
+  if (keys.length === 0) return undefined;
+  try {
+    return JSON.stringify(record).slice(0, 500);
+  } catch {
+    return undefined;
+  }
 }
 
 function toToolItemType(
@@ -734,7 +769,9 @@ export const makePiAdapter = (
       ) {
         const toolCallId =
           typeof record.toolCallId === "string" ? record.toolCallId : NodeCrypto.randomUUID();
+        const rawToolName = typeof record.toolName === "string" ? record.toolName : "Tool";
         const toolName = toolTitle(record);
+        const toolDetail = toolDetailFromArgs(rawToolName, record.args);
         const base = {
           ...stamp(threadId, turnId),
           itemId: runtimeItemId(toolCallId),
@@ -748,8 +785,8 @@ export const makePiAdapter = (
             payload: {
               taskId: runtimeTaskId(`pi-thinking-${turnId}`),
               taskType: "reasoning",
-              description: `Using ${toolName}`,
-              summary: `Using ${toolName}`,
+              description: toolDetail ? `Using ${toolName}: ${toolDetail}` : `Using ${toolName}`,
+              summary: toolDetail ? `Using ${toolName}: ${toolDetail}` : `Using ${toolName}`,
               lastToolName: toolName,
             },
             raw: { source: "pi.rpc", payload: raw },
@@ -761,7 +798,8 @@ export const makePiAdapter = (
               itemType: toToolItemType(toolName),
               status: "inProgress",
               title: toolName,
-              data: record.args,
+              ...(toolDetail ? { detail: toolDetail } : {}),
+              data: { toolCallId, args: record.args },
             },
           } as ProviderRuntimeEvent);
         } else if (record.type === "tool_execution_update") {
@@ -778,7 +816,7 @@ export const makePiAdapter = (
               itemType: toToolItemType(toolName),
               status: record.isError === true ? "failed" : "completed",
               title: toolName,
-              data: record.result,
+              data: { toolCallId, result: record.result },
             },
           } as ProviderRuntimeEvent);
         }

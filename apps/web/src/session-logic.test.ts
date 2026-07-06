@@ -798,6 +798,7 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]?.id).toBe("task-completed");
     expect(entries[0]?.label).toBe("Search complete");
     expect(entries[0]?.sourceActivityKind).toBe("task.completed");
+    expect(entries[0]?.tone).toBe("thinking");
     expect(entries[0]?.toolLifecycleStatus).toBe("completed");
   });
 

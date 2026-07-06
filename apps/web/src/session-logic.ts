@@ -843,9 +843,14 @@ function mergeDerivedWorkLogEntries(
   const taskId = next.taskId ?? previous.taskId;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
+  const tone =
+    shouldCollapseTaskLifecycleEntries(previous, next) && next.tone !== "error"
+      ? previous.tone
+      : next.tone;
   return {
     ...previous,
     ...next,
+    tone,
     ...(detail ? { detail } : {}),
     ...(command ? { command } : {}),
     ...(rawCommand ? { rawCommand } : {}),

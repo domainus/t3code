@@ -366,7 +366,9 @@ async function writeT3McpConfig(
   return configPath;
 }
 
-async function createT3PiExtensionFile(stateDir: string | undefined): Promise<string> {
+async function createT3PiExtensionFile(
+  stateDir: string | undefined,
+): Promise<{ path: string; cleanupPath: string }> {
   const baseDir = stateDir
     ? NodePath.join(stateDir, "pi-extension")
     : await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-code-pi-extension-"));
@@ -438,7 +440,7 @@ export default function t3PiIntegration(pi) {
 `.trimStart(),
     "utf8",
   );
-  return filePath;
+  return { path: filePath, cleanupPath: stateDir ? filePath : baseDir };
 }
 
 async function attachmentImages(input: {
@@ -974,7 +976,7 @@ export const makePiAdapter = (
           const existing = sessions.get(input.threadId);
           if (existing) {
             await existing.client.stop();
-            await Promise.all([...existing.tempFiles].map((file) => NodeFSP.rm(file, { force: true })));
+            await Promise.all([...existing.tempFiles].map((file) => NodeFSP.rm(file, { force: true, recursive: true })));
           }
           const tempFiles = new Set<string>();
           const args: string[] = ["--append-system-prompt", T3_PI_SYSTEM_PROMPT];
@@ -998,18 +1000,30 @@ export const makePiAdapter = (
             tempFiles.add(mcpConfigPath);
           }
           const configuredExtensionPath = options.environment?.T3_PI_EXTENSION_PATH;
-          const extensionPath = configuredExtensionPath ?? (await createT3PiExtensionFile(options.stateDir));
+          const generatedExtension = configuredExtensionPath
+            ? undefined
+            : await createT3PiExtensionFile(options.stateDir);
+          const extensionPath = configuredExtensionPath ?? generatedExtension?.path;
+          if (!extensionPath) {
+            throw new Error("Pi extension path was not generated.");
+          }
           args.push("--extension", extensionPath);
-          if (!configuredExtensionPath) tempFiles.add(extensionPath);
-          const client = await startPiRpcProcess(
-            {
-              binaryPath: settings.binaryPath,
-              cwd,
-              environment: options.environment,
-              args,
-            },
-            (event) => handlePiEvent(input.threadId, event),
-          );
+          if (generatedExtension) tempFiles.add(generatedExtension.cleanupPath);
+          let client: PiRpcClient | undefined;
+          try {
+            client = await startPiRpcProcess(
+              {
+                binaryPath: settings.binaryPath,
+                cwd,
+                environment: options.environment,
+                args,
+              },
+              (event) => handlePiEvent(input.threadId, event),
+            );
+          } catch (cause) {
+            await Promise.all([...tempFiles].map((file) => NodeFSP.rm(file, { force: true, recursive: true })));
+            throw cause;
+          }
           const createdAt = new Date().toISOString();
           const currentSessionFile = (await readSessionFile(client)) ?? sessionFile;
           const session: ProviderSession = {
@@ -1313,7 +1327,7 @@ export const makePiAdapter = (
             sessions.delete(threadId);
             await ctx.client.stop();
             await Promise.allSettled(
-              [...ctx.tempFiles].map((file) => NodeFSP.rm(file, { force: true })),
+              [...ctx.tempFiles].map((file) => NodeFSP.rm(file, { force: true, recursive: true })),
             );
             emit({
               type: "session.exited",
@@ -1394,7 +1408,7 @@ export const makePiAdapter = (
           await Promise.allSettled(
             all.flatMap((ctx) => [
               ctx.client.stop(),
-              ...[...ctx.tempFiles].map((file) => NodeFSP.rm(file, { force: true })),
+              ...[...ctx.tempFiles].map((file) => NodeFSP.rm(file, { force: true, recursive: true })),
             ]),
           );
         }),

@@ -57,6 +57,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
     write({ type: "extension_ui_request", method: "notify", message: "Checked cache" });
     write({ type: "extension_ui_request", method: "notify", message: "Loaded context" });
     write({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "web_search", args: { query: "x" } });
+    write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "thinking_delta", delta: "Thinking after search" } });
     write({ type: "tool_execution_end", toolCallId: "tool-1", toolName: "web_search", result: { summary: "Found results" } });
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Hello" } });
     write({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Hello world" }] } });
@@ -87,7 +88,14 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
     NodeAssert.equal(new Set(notificationTaskIds).size, 2);
     NodeAssert.ok(notificationTaskIds.every((taskId) => taskId.startsWith("pi-notification-")));
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.lastToolName) === "Web search"));
-    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
+    NodeAssert.ok(
+      events.some(
+        (event) =>
+          event.type === "task.completed" &&
+          event.payload.status === "completed" &&
+          String(event.payload.summary).includes("Using Web search: x\nThinking after search"),
+      ),
+    );
     NodeAssert.ok(events.some((event) => event.type === "item.started" && event.payload.title === "Web search"));
     NodeAssert.ok(events.some((event) => event.type === "item.completed" && event.payload.detail === "Found results"));
   }),

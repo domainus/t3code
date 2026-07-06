@@ -144,6 +144,14 @@ function piNotificationTaskId(
   return runtimeTaskId(`pi-notification-${turnId ?? "session"}-${sequence}`);
 }
 
+function appendReasoningSummary(previous: string, delta: string): string {
+  const trimmedDelta = delta.trim();
+  if (trimmedDelta.length === 0) return previous;
+  if (!previous || previous === "Pi started working") return trimmedDelta;
+  if (/\s$/.test(previous) || /^\s/.test(delta)) return `${previous}${delta}`.trim();
+  return `${previous}\n${trimmedDelta}`;
+}
+
 function assistantTextFromPiMessage(message: unknown): string | undefined {
   if (!message || typeof message !== "object") return undefined;
   const record = message as Record<string, unknown>;
@@ -679,9 +687,7 @@ export const makePiAdapter = (
         } as ProviderRuntimeEvent);
         if (text.kind === "reasoning_text" && text.delta.trim().length > 0) {
           const previous = ctx.reasoningSummaryByTurn.get(turnId) ?? "";
-          const nextSummary =
-            previous === "Pi started working" ? text.delta.trim() : `${previous}${text.delta}`.trim();
-          ctx.reasoningSummaryByTurn.set(turnId, nextSummary);
+          ctx.reasoningSummaryByTurn.set(turnId, appendReasoningSummary(previous, text.delta));
           emit({
             type: "task.progress",
             ...stamp(threadId, turnId),

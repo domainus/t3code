@@ -2870,6 +2870,7 @@ describe("ProviderRuntimeIngestion", () => {
       turnId: asTurnId("turn-task-1"),
       payload: {
         taskId: "turn-task-1",
+        taskType: "reasoning",
         description: "Comparing the desktop rollout chunks to the app-server stream.",
         summary: "Code reviewer is validating the desktop rollout chunks.",
       },
@@ -2935,6 +2936,7 @@ describe("ProviderRuntimeIngestion", () => {
     expect(started?.summary).toBe("Plan task started");
     expect(progress?.kind).toBe("task.progress");
     expect(progressPayload?.detail).toBe("Code reviewer is validating the desktop rollout chunks.");
+    expect(progressPayload?.taskType).toBe("reasoning");
     expect(progressPayload?.summary).toBe(
       "Code reviewer is validating the desktop rollout chunks.",
     );

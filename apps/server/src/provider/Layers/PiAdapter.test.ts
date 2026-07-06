@@ -7,11 +7,17 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 
-import { ProviderDriverKind, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, ProviderRuntimeEvent, ThreadId } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { makePiAdapter } from "./PiAdapter.ts";
 
 const asThreadId = (value: string): ThreadId => ThreadId.make(value);
+
+function collectUntilTurnCompleted(adapter: { readonly streamEvents: Stream.Stream<ProviderRuntimeEvent> }) {
+  return Stream.runCollect(
+    Stream.takeUntil(adapter.streamEvents, (event) => event.type === "turn.completed"),
+  ).pipe(Effect.forkChild);
+}
 
 async function writeFakePiScript(events: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "t3-pi-adapter-test-"));
@@ -58,7 +64,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 16)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-test-thread");
     yield* adapter.startSession({
       threadId,
@@ -68,7 +74,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -98,7 +104,7 @@ it.effect("PiAdapter does not turn noninteractive UI notifications into user inp
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 10)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-notify-thread");
     yield* adapter.startSession({
       threadId,
@@ -108,7 +114,7 @@ it.effect("PiAdapter does not turn noninteractive UI notifications into user inp
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     NodeAssert.equal(events.some((event) => event.type === "user-input.requested"), false);
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Pi note")));
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Pi toast")));
@@ -123,7 +129,7 @@ it.effect("PiAdapter completes active reasoning trace when interrupted", () =>
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-interrupt-thread");
     yield* adapter.startSession({
       threadId,
@@ -134,7 +140,7 @@ it.effect("PiAdapter completes active reasoning trace when interrupted", () =>
     });
     const turn = yield* adapter.sendTurn({ threadId, input: "test" });
     yield* adapter.interruptTurn(threadId, turn.turnId);
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "cancelled"));
     const sessions = yield* adapter.listSessions();
@@ -150,7 +156,7 @@ it.effect("PiAdapter fails and clears active turn when the Pi process exits mid-
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 8)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-exit-thread");
     yield* adapter.startSession({
       threadId,
@@ -160,7 +166,7 @@ it.effect("PiAdapter fails and clears active turn when the Pi process exits mid-
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* Effect.exit(adapter.sendTurn({ threadId, input: "test" }));
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "failed"));
     const sessions = yield* adapter.listSessions();
@@ -179,7 +185,7 @@ it.effect("PiAdapter ignores non-assistant message_update text", () =>
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-non-assistant-update-thread");
     yield* adapter.startSession({
       threadId,
@@ -189,7 +195,7 @@ it.effect("PiAdapter ignores non-assistant message_update text", () =>
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -214,7 +220,7 @@ it.effect("PiAdapter surfaces canonical final text when it revises a streamed dr
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-final-revision-thread");
     yield* adapter.startSession({
       threadId,
@@ -224,7 +230,7 @@ it.effect("PiAdapter surfaces canonical final text when it revises a streamed dr
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -241,7 +247,7 @@ it.effect("PiAdapter surfaces canonical final text when streamed text is a suffi
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-overlap-thread");
     yield* adapter.startSession({
       threadId,
@@ -251,7 +257,7 @@ it.effect("PiAdapter surfaces canonical final text when streamed text is a suffi
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -270,7 +276,7 @@ it.effect("PiAdapter reconciles last text-bearing agent_end message", () =>
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-agent-end-text-bearing-thread");
     yield* adapter.startSession({
       threadId,
@@ -280,7 +286,7 @@ it.effect("PiAdapter reconciles last text-bearing agent_end message", () =>
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -297,7 +303,7 @@ it.effect("PiAdapter reconciles custom agent_end text as assistant output", () =
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-custom-agent-end-thread");
     yield* adapter.startSession({
       threadId,
@@ -307,7 +313,7 @@ it.effect("PiAdapter reconciles custom agent_end text as assistant output", () =
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -325,7 +331,7 @@ it.effect("PiAdapter completes turn from custom message_end text", () =>
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 10)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-custom-message-thread");
     yield* adapter.startSession({
       threadId,
@@ -335,7 +341,7 @@ it.effect("PiAdapter completes turn from custom message_end text", () =>
       modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
     });
     yield* adapter.sendTurn({ threadId, input: "test" });
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     const assistantDeltas = events
       .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
       .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
@@ -384,7 +390,7 @@ it.effect("PiAdapter fails and clears active turn when prompt RPC fails", () =>
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 8)).pipe(Effect.forkChild);
+    const eventsFiber = yield* collectUntilTurnCompleted(adapter);
     const threadId = asThreadId("pi-adapter-prompt-fail-thread");
     yield* adapter.startSession({
       threadId,
@@ -395,7 +401,7 @@ it.effect("PiAdapter fails and clears active turn when prompt RPC fails", () =>
     });
     const exit = yield* Effect.exit(adapter.sendTurn({ threadId, input: "test" }));
     NodeAssert.equal(exit._tag, "Failure");
-    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
     NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
     NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "failed"));
     const sessions = yield* adapter.listSessions();

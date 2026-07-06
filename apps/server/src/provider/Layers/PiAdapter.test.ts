@@ -49,6 +49,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
       writeFakePiScript(`
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "thinking_delta", delta: "Thinking about it" } });
     write({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "web_search", args: { query: "x" } });
+    write({ type: "tool_execution_end", toolCallId: "tool-1", toolName: "web_search", result: { summary: "Found results" } });
     write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Hello" } });
     write({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Hello world" }] } });
     write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Hello world" }] }] });
@@ -74,6 +75,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.lastToolName) === "Web search"));
     NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
     NodeAssert.ok(events.some((event) => event.type === "item.started" && event.payload.title === "Web search"));
+    NodeAssert.ok(events.some((event) => event.type === "item.completed" && event.payload.detail === "Found results"));
   }),
 );
 

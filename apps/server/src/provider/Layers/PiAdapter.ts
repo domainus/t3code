@@ -154,6 +154,17 @@ function toolTitle(event: Record<string, unknown>): string {
   return humanizeToolName(rawName);
 }
 
+function summarizeUnknown(value: unknown, maxLength = 500): string | undefined {
+  if (typeof value === "string") return value.trim() || undefined;
+  if (value === undefined || value === null) return undefined;
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized.length > maxLength ? `${serialized.slice(0, maxLength - 1)}…` : serialized;
+  } catch {
+    return String(value);
+  }
+}
+
 function toolDetailFromArgs(toolName: string, args: unknown): string | undefined {
   if (typeof args === "string") return args.trim() || undefined;
   if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
@@ -171,11 +182,18 @@ function toolDetailFromArgs(toolName: string, args: unknown): string | undefined
   }
   const keys = Object.keys(record);
   if (keys.length === 0) return undefined;
-  try {
-    return JSON.stringify(record).slice(0, 500);
-  } catch {
-    return undefined;
+  return summarizeUnknown(record);
+}
+
+function toolDetailFromResult(result: unknown): string | undefined {
+  if (typeof result === "string") return result.trim() || undefined;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return summarizeUnknown(result);
+  const record = result as Record<string, unknown>;
+  for (const key of ["summary", "output", "stdout", "stderr", "text", "message", "error"] as const) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
   }
+  return summarizeUnknown(record);
 }
 
 function toToolItemType(
@@ -817,6 +835,7 @@ export const makePiAdapter = (
         const rawToolName = typeof record.toolName === "string" ? record.toolName : "Tool";
         const toolName = toolTitle(record);
         const toolDetail = toolDetailFromArgs(rawToolName, record.args);
+        const resultDetail = toolDetailFromResult(record.result);
         const base = {
           ...stamp(threadId, turnId),
           itemId: runtimeItemId(toolCallId),
@@ -863,6 +882,7 @@ export const makePiAdapter = (
               itemType: toToolItemType(toolName),
               status: record.isError === true ? "failed" : "completed",
               title: toolName,
+              ...(resultDetail ? { detail: resultDetail } : {}),
               data: { toolCallId, result: record.result },
             },
           } as ProviderRuntimeEvent);

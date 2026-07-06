@@ -94,6 +94,11 @@ function textFromEvent(
   if (!event || typeof event !== "object") return undefined;
   const record = event as Record<string, unknown>;
   if (record.type === "message_update") {
+    const message =
+      record.message && typeof record.message === "object"
+        ? (record.message as Record<string, unknown>)
+        : null;
+    if (message?.role !== "assistant" && message?.role !== "custom") return undefined;
     const nested = record.assistantMessageEvent;
     if (nested && typeof nested === "object") return textFromEvent(nested);
   }

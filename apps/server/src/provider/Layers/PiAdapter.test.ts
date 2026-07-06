@@ -161,6 +161,42 @@ it.effect("PiAdapter fails and clears active turn when the Pi process exits mid-
   }),
 );
 
+it.effect("PiAdapter ignores non-assistant message_update text", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    write({ type: "message_update", message: { role: "user" }, assistantMessageEvent: { type: "text_delta", delta: "Do not show" } });
+    write({ type: "message_update", message: { role: "toolResult" }, assistantMessageEvent: { type: "thinking_delta", delta: "Do not think" } });
+    write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Visible answer" }] }] });
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-non-assistant-update-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    yield* adapter.sendTurn({ threadId, input: "test" });
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const assistantDeltas = events
+      .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
+      .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
+    NodeAssert.deepEqual(assistantDeltas, ["Visible answer"]);
+    NodeAssert.equal(
+      events.some(
+        (event) =>
+          event.type === "content.delta" &&
+          (event.payload.delta === "Do not show" || event.payload.delta === "Do not think"),
+      ),
+      false,
+    );
+  }),
+);
+
 it.effect("PiAdapter reconciles final text containing already-streamed text without duplicating the answer", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>

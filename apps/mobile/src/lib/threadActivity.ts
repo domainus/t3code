@@ -280,6 +280,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       : null;
   const taskLabel = taskSummary || taskDetailAsLabel;
   const taskId = isTaskActivity ? asTrimmedString(payload?.taskId) : null;
+  const taskType = asTrimmedString(payload?.taskType);
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
@@ -287,7 +288,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     label: taskLabel || activity.summary,
     tone:
       activity.kind === "task.progress"
-        ? "thinking"
+        ? taskType === "notification"
+          ? "info"
+          : "thinking"
         : activity.tone === "approval"
           ? "info"
           : activity.tone,

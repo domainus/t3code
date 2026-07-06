@@ -211,6 +211,42 @@ describe("buildThreadFeed", () => {
     });
   });
 
+  it("renders notification task progress as info on mobile", () => {
+    const turnId = TurnId.make("turn-notification");
+    const thread = makeThread({
+      id: ThreadId.make("thread-notification"),
+      projectId: ProjectId.make("project-1"),
+      title: "Notification trace",
+      activities: [
+        makeActivity({
+          id: EventId.make("notification-progress"),
+          kind: "task.progress",
+          tone: "info",
+          summary: "Pi notification",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId,
+          payload: {
+            taskId: "pi-notification-turn-notification-1",
+            taskType: "notification",
+            summary: "Checked cache",
+          },
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread);
+    const group = feed[0];
+    expect(group).toMatchObject({ type: "activity-group" });
+    if (!group || group.type !== "activity-group") return;
+    expect(group.activities[0]).toMatchObject({
+      id: "notification-progress",
+      summary: "Checked cache",
+      icon: "check",
+      toolLike: false,
+      status: null,
+    });
+  });
+
   it("collapses mobile task progress with matching completion", () => {
     const turnId = TurnId.make("turn-thinking-complete");
     const thread = makeThread({

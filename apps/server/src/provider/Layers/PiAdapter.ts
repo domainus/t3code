@@ -823,7 +823,8 @@ export const makePiAdapter = (
               Boolean(
                 message &&
                   typeof message === "object" &&
-                  (message as Record<string, unknown>).role === "assistant",
+                  ((message as Record<string, unknown>).role === "assistant" ||
+                    (message as Record<string, unknown>).role === "custom"),
               ),
             );
           reconcileAssistantText(threadId, ctx, turnId, finalAssistant, raw);

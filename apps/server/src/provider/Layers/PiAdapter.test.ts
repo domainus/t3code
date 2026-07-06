@@ -188,6 +188,33 @@ it.effect("PiAdapter reconciles final text containing already-streamed text with
   }),
 );
 
+it.effect("PiAdapter reconciles custom agent_end text as assistant output", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    write({ type: "agent_end", messages: [{ role: "custom", content: [{ type: "text", text: "Custom final answer" }] }] });
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-custom-agent-end-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    yield* adapter.sendTurn({ threadId, input: "test" });
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const assistantDeltas = events
+      .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
+      .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
+    NodeAssert.deepEqual(assistantDeltas, ["Custom final answer"]);
+    NodeAssert.ok(events.some((event) => event.type === "turn.completed" && event.payload.state === "completed"));
+  }),
+);
+
 it.effect("PiAdapter completes turn from custom message_end text", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>

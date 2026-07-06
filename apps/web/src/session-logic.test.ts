@@ -611,13 +611,21 @@ describe("workEntryIndicatesToolFailure", () => {
     ).toBe(true);
   });
 
-  it("detects glob no files and PowerShell command errors", () => {
+  it("detects glob no files, permission, and PowerShell command errors", () => {
     expect(
       workEntryIndicatesToolFailure({
         ...base,
         label: "Glob",
         tone: "tool",
         detail: "No files found",
+      }),
+    ).toBe(true);
+    expect(
+      workEntryIndicatesToolFailure({
+        ...base,
+        label: "Bash",
+        tone: "tool",
+        detail: "bash: ./script.sh: Permission denied",
       }),
     ).toBe(true);
     expect(

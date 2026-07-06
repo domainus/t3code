@@ -187,6 +187,15 @@ function toolDetailTextLooksLikeFailure(text: string): boolean {
   if (t.includes("command not found")) {
     return true;
   }
+  if (t.includes("permission denied") || t.includes("access denied")) {
+    return true;
+  }
+  if (t.includes("operation not permitted")) {
+    return true;
+  }
+  if (t.includes("eacces") || t.includes("eperm")) {
+    return true;
+  }
   if (/<exited with exit code\s+[1-9]\d*\s*>/i.test(text)) {
     return true;
   }

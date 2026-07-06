@@ -482,6 +482,11 @@ function toolDetailTextLooksLikeFailure(text: string): boolean {
     normalized.includes("no such file") ||
     normalized.includes("commandnotfoundexception") ||
     normalized.includes("command not found") ||
+    normalized.includes("permission denied") ||
+    normalized.includes("access denied") ||
+    normalized.includes("operation not permitted") ||
+    normalized.includes("eacces") ||
+    normalized.includes("eperm") ||
     (normalized.includes("cannot find path") && normalized.includes("because it does not exist")) ||
     (normalized.includes("is not recognized") && normalized.includes("the term '")) ||
     /<exited with exit code\s+[1-9]\d*\s*>/i.test(text) ||

@@ -496,7 +496,7 @@ describe("buildThreadFeed", () => {
           payload: {
             title: "Run command",
             itemType: "command_execution",
-            detail: "zsh: command not found: nope",
+            detail: "bash: ./script.sh: Permission denied",
             status: "completed",
           },
         }),

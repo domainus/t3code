@@ -572,7 +572,6 @@ export const makePiAdapter = (
     const appendMissingAssistantText = (streamed: string, finalText: string): string => {
       if (finalText.startsWith(streamed)) return finalText.slice(streamed.length);
       if (streamed.length === 0) return finalText;
-      if (streamed.includes(finalText)) return "";
       const streamedOffsetInFinal = finalText.indexOf(streamed);
       if (streamedOffsetInFinal >= 0) {
         return finalText.slice(streamedOffsetInFinal + streamed.length);

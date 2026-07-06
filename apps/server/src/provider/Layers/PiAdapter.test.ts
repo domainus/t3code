@@ -205,6 +205,33 @@ it.effect("PiAdapter ignores non-assistant message_update text", () =>
   }),
 );
 
+it.effect("PiAdapter surfaces canonical final text when it revises a streamed draft", () =>
+  Effect.gen(function* () {
+    const fakePi = yield* Effect.promise(() =>
+      writeFakePiScript(`
+    write({ type: "message_update", message: { role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Hello world!!!" } });
+    write({ type: "agent_end", messages: [{ role: "assistant", content: [{ type: "text", text: "Hello world" }] }] });
+`),
+    );
+    const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 9)).pipe(Effect.forkChild);
+    const threadId = asThreadId("pi-adapter-final-revision-thread");
+    yield* adapter.startSession({
+      threadId,
+      provider: ProviderDriverKind.make("pi"),
+      cwd: tmpdir(),
+      runtimeMode: "full-access",
+      modelSelection: createModelSelection(ProviderInstanceId.make("pi"), "openai/gpt-5.5"),
+    });
+    yield* adapter.sendTurn({ threadId, input: "test" });
+    const events = Array.from(yield* Fiber.join(eventsFiber));
+    const assistantDeltas = events
+      .filter((event) => event.type === "content.delta" && event.payload.streamKind === "assistant_text")
+      .map((event) => (event.type === "content.delta" ? event.payload.delta : ""));
+    NodeAssert.deepEqual(assistantDeltas, ["Hello world!!!", "\n\nHello world"]);
+  }),
+);
+
 it.effect("PiAdapter reconciles final text containing already-streamed text without duplicating the answer", () =>
   Effect.gen(function* () {
     const fakePi = yield* Effect.promise(() =>

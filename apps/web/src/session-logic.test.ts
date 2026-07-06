@@ -773,6 +773,34 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]?.label).toBe("Searching for API endpoints");
   });
 
+  it("collapses task.progress and task.completed for the same task", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "task-progress",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "task.progress",
+        summary: "Reasoning update",
+        tone: "info",
+        payload: { taskId: "reasoning-1", summary: "Searching" },
+      }),
+      makeActivity({
+        id: "task-completed",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        kind: "task.completed",
+        summary: "Task completed",
+        tone: "info",
+        payload: { taskId: "reasoning-1", status: "completed", detail: "Search complete" },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.id).toBe("task-completed");
+    expect(entries[0]?.label).toBe("Search complete");
+    expect(entries[0]?.sourceActivityKind).toBe("task.completed");
+    expect(entries[0]?.toolLifecycleStatus).toBe("completed");
+  });
+
   it("uses payload detail as label for task.completed and preserves error tone", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

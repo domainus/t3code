@@ -84,6 +84,7 @@ interface DerivedWorkLogEntry extends WorkLogEntry {
   activityKind: OrchestrationThreadActivity["kind"];
   collapseKey?: string;
   toolCallId?: string;
+  taskId?: string;
 }
 
 export interface PendingApproval {
@@ -704,6 +705,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       : null
     : extractToolDetail(payload, title ?? activity.summary);
   const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
+  const taskId = isTaskActivity ? asTrimmedString(payload?.taskId) : null;
   const taskType = asTrimmedString(payload?.taskType);
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
@@ -752,6 +754,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (toolCallId) {
     entry.toolCallId = toolCallId;
   }
+  if (taskId) {
+    entry.taskId = taskId;
+  }
   let toolLifecycleStatus = extractWorkLogToolLifecycleStatus(payload);
   if (!toolLifecycleStatus && activity.kind === "tool.completed") {
     toolLifecycleStatus = "completed";
@@ -772,13 +777,29 @@ function collapseDerivedWorkLogEntries(
   const collapsed: DerivedWorkLogEntry[] = [];
   for (const entry of entries) {
     const previous = collapsed.at(-1);
-    if (previous && shouldCollapseToolLifecycleEntries(previous, entry)) {
+    if (
+      previous &&
+      (shouldCollapseToolLifecycleEntries(previous, entry) ||
+        shouldCollapseTaskLifecycleEntries(previous, entry))
+    ) {
       collapsed[collapsed.length - 1] = mergeDerivedWorkLogEntries(previous, entry);
       continue;
     }
     collapsed.push(entry);
   }
   return collapsed;
+}
+
+function shouldCollapseTaskLifecycleEntries(
+  previous: DerivedWorkLogEntry,
+  next: DerivedWorkLogEntry,
+): boolean {
+  return (
+    previous.activityKind === "task.progress" &&
+    next.activityKind === "task.completed" &&
+    previous.taskId !== undefined &&
+    previous.taskId === next.taskId
+  );
 }
 
 function shouldCollapseToolLifecycleEntries(
@@ -819,6 +840,7 @@ function mergeDerivedWorkLogEntries(
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
   const toolCallId = next.toolCallId ?? previous.toolCallId;
+  const taskId = next.taskId ?? previous.taskId;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
   return {
@@ -833,6 +855,7 @@ function mergeDerivedWorkLogEntries(
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),
     ...(toolCallId ? { toolCallId } : {}),
+    ...(taskId ? { taskId } : {}),
     ...(toolLifecycleStatus !== undefined ? { toolLifecycleStatus } : {}),
     ...(toolData !== undefined ? { toolData } : {}),
   };

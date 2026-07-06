@@ -59,6 +59,7 @@ interface PiSessionContext {
     { resolve: (value: unknown) => void; reject: (cause: Error) => void }
   >;
   assistantTextByTurn: Map<TurnId, string>;
+  reasoningSummaryByTurn: Map<TurnId, string>;
 }
 
 interface PiCapturedEntry {
@@ -124,6 +125,10 @@ function readPiTextContent(content: unknown): string {
       return [];
     })
     .join("\n\n");
+}
+
+function piThinkingTaskId(turnId: TurnId | string): RuntimeTaskId {
+  return runtimeTaskId(`pi-thinking-${turnId}`);
 }
 
 function assistantTextFromPiMessage(message: unknown): string | undefined {
@@ -529,6 +534,20 @@ export const makePiAdapter = (
       }
     };
 
+    const appendMissingAssistantText = (streamed: string, finalText: string): string => {
+      if (finalText.startsWith(streamed)) return finalText.slice(streamed.length);
+      if (streamed.length === 0) return finalText;
+      const maxOverlap = Math.min(streamed.length, finalText.length);
+      for (let size = maxOverlap; size > 0; size -= 1) {
+        if (streamed.slice(-size) === finalText.slice(0, size)) {
+          return finalText.slice(size);
+        }
+      }
+      // If Pi's final transcript is not an extension of the streamed text, prefer
+      // surfacing the canonical final answer over silently dropping it.
+      return `\n\n${finalText}`;
+    };
+
     const reconcileAssistantText = (
       threadId: ThreadId,
       ctx: PiSessionContext,
@@ -539,7 +558,8 @@ export const makePiAdapter = (
       const finalText = assistantTextFromPiMessage(message);
       if (!finalText) return;
       const streamed = ctx.assistantTextByTurn.get(turnId) ?? "";
-      const missing = finalText.startsWith(streamed) ? finalText.slice(streamed.length) : streamed.length === 0 ? finalText : "";
+      if (streamed === finalText) return;
+      const missing = appendMissingAssistantText(streamed, finalText);
       if (missing.length === 0) return;
       ctx.assistantTextByTurn.set(turnId, `${streamed}${missing}`);
       emit({
@@ -548,6 +568,27 @@ export const makePiAdapter = (
         payload: { streamKind: "assistant_text", delta: missing },
         raw: { source: "pi.rpc", payload: raw },
       } as ProviderRuntimeEvent);
+    };
+
+    const completeReasoningTask = (
+      threadId: ThreadId,
+      ctx: PiSessionContext,
+      turnId: TurnId,
+      raw: unknown,
+    ) => {
+      const summary = ctx.reasoningSummaryByTurn.get(turnId);
+      if (!summary) return;
+      emit({
+        type: "task.completed",
+        ...stamp(threadId, turnId),
+        payload: {
+          taskId: piThinkingTaskId(turnId),
+          status: "completed",
+          summary,
+        },
+        raw: { source: "pi.rpc", payload: raw },
+      } as ProviderRuntimeEvent);
+      ctx.reasoningSummaryByTurn.delete(turnId);
     };
 
     const handlePiEvent = (threadId: ThreadId, raw: unknown) => {
@@ -573,11 +614,14 @@ export const makePiAdapter = (
           raw: { source: "pi.rpc", payload: raw },
         } as ProviderRuntimeEvent);
         if (text.kind === "reasoning_text" && text.delta.trim().length > 0) {
+          const previous = ctx.reasoningSummaryByTurn.get(turnId) ?? "";
+          const nextSummary = `${previous}${text.delta}`.trim();
+          ctx.reasoningSummaryByTurn.set(turnId, nextSummary);
           emit({
             type: "task.progress",
             ...stamp(threadId, turnId),
             payload: {
-              taskId: runtimeTaskId(`pi-thinking-${turnId}`),
+              taskId: piThinkingTaskId(turnId),
               taskType: "reasoning",
               description: text.delta,
               summary: text.delta,
@@ -695,6 +739,7 @@ export const makePiAdapter = (
             );
           reconcileAssistantText(threadId, ctx, turnId, finalAssistant, raw);
         }
+        completeReasoningTask(threadId, ctx, turnId, raw);
         emit({
           type: "turn.completed",
           ...stamp(threadId, turnId),
@@ -723,7 +768,7 @@ export const makePiAdapter = (
           type: "task.progress",
           ...stamp(threadId, turnId),
           payload: {
-            taskId: runtimeTaskId(`pi-thinking-${turnId}`),
+            taskId: piThinkingTaskId(turnId),
             taskType: "reasoning",
             description: "Pi started working",
             summary: "Pi started working",
@@ -779,14 +824,16 @@ export const makePiAdapter = (
           raw: { source: "pi.rpc", payload: raw },
         };
         if (record.type === "tool_execution_start") {
+          const toolSummary = toolDetail ? `Using ${toolName}: ${toolDetail}` : `Using ${toolName}`;
+          ctx.reasoningSummaryByTurn.set(turnId, toolSummary);
           emit({
             type: "task.progress",
             ...stamp(threadId, turnId),
             payload: {
-              taskId: runtimeTaskId(`pi-thinking-${turnId}`),
+              taskId: piThinkingTaskId(turnId),
               taskType: "reasoning",
-              description: toolDetail ? `Using ${toolName}: ${toolDetail}` : `Using ${toolName}`,
-              summary: toolDetail ? `Using ${toolName}: ${toolDetail}` : `Using ${toolName}`,
+              description: toolSummary,
+              summary: toolSummary,
               lastToolName: toolName,
             },
             raw: { source: "pi.rpc", payload: raw },
@@ -900,6 +947,7 @@ export const makePiAdapter = (
             capturedUserEntries: [],
             pendingExtensionResults: new Map(),
             assistantTextByTurn: new Map(),
+            reasoningSummaryByTurn: new Map(),
           });
           emit({
             type: "session.started",

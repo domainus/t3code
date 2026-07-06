@@ -55,7 +55,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
 `),
     );
     const adapter = yield* makePiAdapter({ enabled: true, binaryPath: fakePi, customModels: [] });
-    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 12)).pipe(Effect.forkChild);
+    const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 14)).pipe(Effect.forkChild);
     const threadId = asThreadId("pi-adapter-test-thread");
     yield* adapter.startSession({
       threadId,
@@ -72,6 +72,7 @@ it.effect("PiAdapter reconciles final assistant text and surfaces thinking/tool 
     NodeAssert.deepEqual(assistantDeltas, ["Hello", " world"]);
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.summary).includes("Thinking")));
     NodeAssert.ok(events.some((event) => event.type === "task.progress" && String(event.payload.lastToolName) === "Web search"));
+    NodeAssert.ok(events.some((event) => event.type === "task.completed" && event.payload.status === "completed"));
     NodeAssert.ok(events.some((event) => event.type === "item.started" && event.payload.title === "Web search"));
   }),
 );
